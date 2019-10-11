@@ -22,8 +22,7 @@ def upload_directory(directory, upload_url, index_mtime=None):
     # sub listing the files by their size (threshold = 4 MB)
     big_files = list(filter(lambda x: x[1] > 4.0, files_and_sizes))
     small_files = list(filter(lambda x: x[1] <= 4.0, files_and_sizes))
-    # small_files = [f for f in files_and_sizes if f not in big_files]
-
+     
     init_headers = {
         'Authorization': 'Bearer {}'.format(os.environ['PLUGIN_TOKEN'])
     }
@@ -57,7 +56,7 @@ def upload_directory(directory, upload_url, index_mtime=None):
                     raise Exception('Error occurs when uploading a file with 4MB < size < 50MB!')
 
             else:  # if the file > 50MB, compress it and then post by chunks
-                # Create the in-memory file-like object
+                # Create the in-memory file-like object'
                 buffer = BytesIO()
                 # Compress 'yaml' files
                 try:
@@ -122,7 +121,7 @@ def check_static_directory(directory):
 
     # The path of the subdirectory that contains static files
     static_dir = os.path.join(directory, '_build', 'html')
-    index_html = os.path.join(html_dir, 'index.html')
+    index_html = os.path.join(static_dir, 'index.html')
     if not os.path.exists(static_dir):
         raise FileNotFoundError("No '_build/html' directory")
     elif not os.path.isdir(static_dir):
