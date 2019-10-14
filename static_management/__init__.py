@@ -1,42 +1,80 @@
-import os
+import logging
+from functools import partial, wraps
 
-# 3rd party libs
-from flask import Flask, request, session, redirect, flash
+from flask import Flask, request
+import jwt
+from werkzeug.exceptions import Unauthorized, BadRequest
 
-# from this project
 from static_management import config
+from .utils import ImproperlyConfigured
 
-__version__ = '0.1'
+logger = logging.getLogger(__name__)
 
-config = {
-    "development": "static_management.config.DevelopmentConfig",
-    "testing": "static_management.config.TestingConfig",
-    "default": "static_management.config.DevelopmentConfig"
-}
+__version__ = '1.0.0'
 
-
-def configure_app(app):
-    config_name = os.getenv('FLASK_CONFIGURATION', 'default')
-    app.config.from_object(config[config_name])  # object-based default configuration
-    # app.config.from_pyfile('config.py', silent=True)  # instance-folders configuration
+# config = {
+#     "development": "static_management.config.DevelopmentConfig",
+#     "testing": "static_management.config.TestingConfig",
+#     "default": "static_management.config.DevelopmentConfig"
+# }
 
 
-def create_app():
+# def configure_app(app):
+#     config_name = os.getenv('FLASK_CONFIGURATION', 'default')
+#     app.config.from_object(config[config_name])  # object-based default configuration
+#     # app.config.from_pyfile('config.py', silent=True)  # instance-folders configuration
 
-    app = Flask(__name__, instance_relative_config=True)
-    configure_app(app)
-    app.jinja_env.add_extension('jinja2.ext.loopcontrols')
 
-    with app.app_context():
+app = Flask(__name__)
+app.config.from_object(config.DevelopmentConfig)
 
-        from static_management.views import bp
-        app.register_blueprint(bp)
 
-        # Handle HTTP 403 error
-        @app.errorhandler(403)
-        def access_forbidden(e):
-            session['redirected_from'] = request.url
-            flash('Access Forbidden')
-            return redirect('/')
+# ----------------------------------------------------------------------------------------------------------------------
+# JWT Authentication
 
-    return app
+def setting_in_bytes(app_instance, name):
+    value = app_instance.config.get(name)
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return value.encode('utf-8')
+    raise ImproperlyConfigured(
+        "Value for settings.%s is not bytes or str."
+        % (name,))
+
+
+def prepare_decoder(app_instance):
+    options = {'verify_' + k: True for k in ('iat', 'iss')}
+    options.update({'require_' + k: True for k in ('iat',)})
+    jwt_issuer = app_instance.config.get('JWT_ISSUER')
+    if jwt_issuer:
+        options['issuer'] = jwt_issuer
+
+    if app_instance.config.get('JWT_PUBLIC_KEY'):
+        try:
+            from cryptography.hazmat.backends import default_backend
+            from cryptography.hazmat.primitives.serialization import load_pem_public_key
+        except ImportError as error:
+            raise ImproperlyConfigured(
+                "Require `cryptography` when using settings.JWT_PUBLIC_KEY: %s"
+                % (error,))
+        pem = setting_in_bytes(app_instance, 'JWT_PUBLIC_KEY')
+        try:
+            key = load_pem_public_key(pem, backend=default_backend())
+        except ValueError as error:
+            raise ImproperlyConfigured(
+                "Invalid public key in JWT_PUBLIC_KEY: %s"
+                % (error,))
+        return partial(jwt.decode,
+                       key=key,
+                       algorithms=app_instance.config.get('JWT_ALGORITHM'),
+                       **options)
+    return None
+
+
+
+
+
+
+
+
