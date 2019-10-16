@@ -61,7 +61,6 @@ def upload_octet_stream(temp_course_dir):
     # parse data
     try:
         data = request.data
-        print(data)
         os.makedirs(temp_course_dir, exist_ok=True)
 
         # write the compressed file
@@ -81,55 +80,72 @@ def upload_octet_stream(temp_course_dir):
 
             os.remove(temp_compressed)  # Delete the compressed file
     except:
-        logger.info(traceback.format_exc())
+        if os.path.exists(temp_course_dir):
+            shutil.rmtree(temp_course_dir)
         raise
 
 
 def upload_form_data(data, file, temp_course_dir):
     """ Upload file data posted by a request with form-data content-type to the temp course directory
     """
+    try:
+        # write the non-compression file
+        if 'compression_file' not in data:
+            file_name = os.path.join(temp_course_dir, data['file_name'])
+            os.makedirs(os.path.dirname(file_name), exist_ok=True)
+            with open(file_name, 'wb') as f:
+                chunk_size = 4096
+                while True:
+                    chunk = file.stream.read(chunk_size)
+                    if len(chunk) == 0:
+                        break
+                    f.write(chunk)
+        else:
+            # write the compressed file
+            os.makedirs(temp_course_dir, exist_ok=True)
+            temp_compressed = os.path.join(temp_course_dir, 'temp.tar.gz')
+            with open(temp_compressed, 'wb') as f:
+                chunk_size = 4096
+                while True:
+                    chunk = file.stream.read(chunk_size)
+                    if len(chunk) == 0:
+                        break
+                    f.write(chunk)
 
-    # write the non-compression file
-    if 'compression_file' not in data:
-        file_name = os.path.join(temp_course_dir, data['file_name'])
-        os.makedirs(os.path.dirname(file_name), exist_ok=True)
-        with open(file_name, 'wb') as f:
-            chunk_size = 4096
-            while True:
-                chunk = file.stream.read(chunk_size)
-                if len(chunk) == 0:
-                    break
-                f.write(chunk)
-    else:
-        # write the compressed file
-        os.makedirs(temp_course_dir, exist_ok=True)
-        temp_compressed = os.path.join(temp_course_dir, 'temp.tar.gz')
-        with open(temp_compressed, 'wb') as f:
-            chunk_size = 4096
-            while True:
-                chunk = file.stream.read(chunk_size)
-                if len(chunk) == 0:
-                    break
-                f.write(chunk)
+            # extract the compression file
+            with tarfile.open(temp_compressed, "r:gz") as tf:
+                tf.extractall(temp_course_dir)
 
-        # extract the compression file
-        with tarfile.open(temp_compressed, "r:gz") as tf:
-            tf.extractall(temp_course_dir)
-
-        os.remove(temp_compressed)  # delete the compression file
+            os.remove(temp_compressed)  # delete the compression file
+    except:
+        if os.path.exists(temp_course_dir):
+            shutil.rmtree(temp_course_dir)
+        raise
 
 
 def update_course_dir(course_dir, temp_course_dir):
     """ Update the course directory from the temp course directory
     """
-
     if not os.path.exists(course_dir):  # Rename the temp dir
         logger.info('The course directory does not exist before, will be created')
-        os.rename(temp_course_dir, course_dir)
+        try:
+            os.rename(temp_course_dir, course_dir)
+        except:
+            shutil.rmtree(temp_course_dir)
+            raise
     else:  # update the existing course dir (atomic)
         logger.info('The course directory already exists, will be updated')
-        os.rename(course_dir, course_dir + '_old')
-        os.rename(temp_course_dir, course_dir)
+        try:
+            os.rename(course_dir, course_dir + '_old')
+        except:
+            shutil.rmtree(temp_course_dir)
+            raise
+        try:
+            os.rename(temp_course_dir, course_dir)
+        except:
+            shutil.rmtree(temp_course_dir)
+            os.rename(course_dir + '_old', course_dir)
+            raise
         shutil.rmtree(course_dir + '_old')
 
 # ----------------------------------------------------------------------------------------------------------------------
