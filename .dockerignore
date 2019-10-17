@@ -1,0 +1,7 @@
+Dockerfile
+.dockerignore
+
+.gitignore
+
+static/*
+!static/.keep
