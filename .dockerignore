@@ -1,0 +1,11 @@
+Dockerfile
+.dockerignore
+
+.gitignore
+
+*.pyc
+**/__pycache__/
+**/.idea/
+
+static_management/courses/*
+!static_management/courses/.keep
