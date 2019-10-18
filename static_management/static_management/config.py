@@ -5,7 +5,7 @@ class Config(object):
     DEBUG = False
     TESTING = False
     BASE_DIR = dirname(dirname(__file__))
-    STATIC_PATH = join(BASE_DIR, 'static')
+    STATIC_FILE_PATH = join(BASE_DIR, 'courses')
     JWT_ALGORITHM = "RS256"
     JWT_ISSUER = "shepherd"
     # JWT_PUBLIC_KEY = """
