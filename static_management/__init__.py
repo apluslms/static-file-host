@@ -1,9 +1,8 @@
 import logging
-from functools import partial, wraps
+from functools import partial
 
-from flask import Flask, request
+from flask import Flask
 import jwt
-from werkzeug.exceptions import Unauthorized, BadRequest
 
 from static_management import config
 from .utils import ImproperlyConfigured

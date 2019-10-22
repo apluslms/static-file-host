@@ -1,7 +1,6 @@
 import os
 import logging
 import traceback
-# from functools import wraps
 
 from flask import request, jsonify
 import jwt
@@ -10,7 +9,6 @@ from werkzeug.exceptions import BadRequest, Unauthorized
 from static_management import (
     app,
     prepare_decoder,
-    # jwt_auth,
 )
 from static_management.utils import (
     whether_can_upload,
@@ -76,7 +74,6 @@ def index():
 
 
 @app.route('/<course_name>/upload', methods=['GET', 'POST'])
-# @course_manage_required
 def static_upload(course_name):
     """
         Upload/Update static files of a course
@@ -85,11 +82,11 @@ def static_upload(course_name):
     auth = authenticate()
 
     # the absolute path of the course in the server
-    static_path = app.config.get('STATIC_PATH')
-    if not static_path:
-        return ImproperlyConfigured('STATIC_PATH not configured')
+    static_file_path = app.config.get('STATIC_FILE_PATH')
+    if not static_file_path:
+        return ImproperlyConfigured('STATIC_FILE_PATH not configured')
 
-    course_directory = os.path.join(static_path, course_name)
+    course_directory = os.path.join(static_file_path, course_name)
 
     message = None  # The message in response
 
@@ -101,14 +98,14 @@ def static_upload(course_name):
         logger.warning(content_type)
         return BadRequest("Unsupported content-type")
 
-    temp_course_dir = os.path.join(static_path, 'temp_' + course_name)
+    temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name)
     # check whether the data can be uploaded
     try:
         whether_can_upload(content_type, course_directory, temp_course_dir)
     except:
         return BadRequest(error_print())
 
-    # upload/ update the course directory in mooc-grader
+    # upload/ update the courses files of a course
     try:
         if content_type == 'application/octet-stream':
 

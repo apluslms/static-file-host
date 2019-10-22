@@ -1,7 +1,10 @@
+venv/
+
 Dockerfile
 .dockerignore
-
 .gitignore
 
-static/*
-!static/.keep
+courses/*
+!courses/.keep
+
+run.sh

@@ -7,7 +7,8 @@ WORKDIR /srv/static_management/
 RUN :\
     && adduser --system --disabled-password --gecos "static management system,,," --ingroup nogroup static_management \
     && chown static_management.nogroup /srv/static_management \
-    && pip3 install -r requirements.txt
+    && pip3 install -r requirements.txt \
+    && rm requirements.txt
 
 EXPOSE 5000
 CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
