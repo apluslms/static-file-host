@@ -1,8 +1,10 @@
 venv/
 
 *.pyc
-__pycache__/
-.idea/
+**/__pycache__/
+**/.idea/
 
-courses/*
-!courses/.keep
+static_management/courses/*
+!static_management/courses/.keep
+
+static_management/static_upload.sh
