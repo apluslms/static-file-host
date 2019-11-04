@@ -20,11 +20,12 @@ RUN :\
     && apt-get install -y \
         build-essential \
         python3-dev \
+#        uwsgi-plugin-python3 \
         nginx\
         libpcre3 \
         libpcre3-dev \
-    && adduser --system --disabled-password --gecos "static management server,,," --ingroup www-data static_management \
-    && chown -R static_management:www-data /srv/static_management \
+#    && adduser --system --disabled-password --gecos "static management server,,," --ingroup www-data static_management \
+    && chown -R www-data:www-data /srv/static_management \
     && pip3 install -r requirements.txt \
     && pip3 install uwsgi -I --no-cache-dir
 

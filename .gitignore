@@ -1,4 +1,4 @@
-venv/
+static_management/venv/
 
 *.pyc
 **/__pycache__/
@@ -6,5 +6,3 @@ venv/
 
 static_management/courses/*
 !static_management/courses/.keep
-
-static_management/static_upload.sh

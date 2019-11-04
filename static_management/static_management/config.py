@@ -23,7 +23,7 @@ class Config(object):
 
 
 class DevelopmentConfig(Config):
-    PORT = 5000
+    # PORT = 5000
     DEBUG = True
 
 
