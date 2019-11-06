@@ -1,6 +1,5 @@
 import os
-from utils import upload_directory, check_static_directory
-
+from utils import check_static_directory, upload_directory 
 
 def main():
 

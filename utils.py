@@ -5,11 +5,15 @@ import tarfile
 import requests
 from math import floor
 from operator import itemgetter
+import traceback
+import logging
 
+logger = logging.getLogger(__name__)
 
-def upload_directory(directory, upload_url, index_mtime=None):
-    """ The files bigger than 4M is uploaded one by one, 
-        and the smaller files are compressed to around 4M compression files to upload
+def upload_directory(directory, upload_url, index_mtime):
+    """ 1. the files bigger than 50MB are compressed one by one, 
+        and the smaller files are collected to fill a quota (50MB) and then compressed
+        2. the compression file smaller than 4MB is posted directly, otherwise posted by chunks 
     
     Arguments:
         directory {str} -- path of the course directory
@@ -19,58 +23,55 @@ def upload_directory(directory, upload_url, index_mtime=None):
 
     files_and_sizes = files_sizes_list(directory)
 
-    # sub listing the files by their size (threshold = 4 MB)
-    big_files = list(filter(lambda x: x[1] > 4.0, files_and_sizes))
-    small_files = list(filter(lambda x: x[1] <= 4.0, files_and_sizes))
+    # sub listing the files by their size (threshold = 50 MB)
+    big_files = list(filter(lambda x: x[1] > 50.0, files_and_sizes))
+    small_files = list(filter(lambda x: x[1] <= 50.0, files_and_sizes))
      
     init_headers = {
         'Authorization': 'Bearer {}'.format(os.environ['PLUGIN_TOKEN'])
     }
-
-    # Post big files one by one
+    # big files are compressed and uploaded one by one
     if big_files:
         for file_index, f in enumerate(big_files):
 
             headers = init_headers
-            last_file = False
             if file_index == len(big_files)-1 and not small_files:
                 last_file = True
+            else:
+                 last_file = False
 
-            if f[1] <= 50.0:  # if the file <= 50MB, post the file object directly
-                # the modification time of the index.yaml file
-                if index_mtime is not None:
-                    data = {'index_mtime': index_mtime}
-                else:
-                    data = dict() 
-                file_name = os.path.relpath(f[0], start=directory)
-                data['file_name'] = file_name
-                # flag of the last configuration file
-                if last_file:
-                    data['last_file'] = True
+            # Create the in-memory file-like object'
+            buffer = BytesIO()
+            # Compress 'yaml' files
+            try:
+                with tarfile.open(fileobj=buffer, mode='w:gz') as tf:
+                    # Write the file to the in-memory tar
+                    file_name = os.path.relpath(f[0], start=directory)
+                    tf.add(f[0], file_name)
+            except:
+                logger.info(traceback.format_exc())
+                raise
+            
+            # the current position of the buffer
+            # buffer.seek(0,SEEK_END)
+            pos = buffer.tell()
+            # Change the stream position to the start
+            buffer.seek(0)
+            print("length of the buffer: ", pos)
+
+            # Upload the compressed file by chunks
+            if (pos/(1024 * 1024.0)) <= 4.0:
+                # upload the whole compressed file 
+                files = {'file': buffer.getvalue()}
+                data = {'last_file': last_file} 
                 try:
-                    response = requests.post(upload_url, headers=headers, 
-                                             data=data, files={'file': open(f[0], 'rb')})
+                    response = requests.post(upload_url, headers=headers, data=data, files=files)
                     if last_file:
                         print(response.text)
                 except:
-                    raise Exception('Error occurs when uploading a file with 4MB < size < 50MB!')
-
-            else:  # if the file > 50MB, compress it and then post by chunks
-                # Create the in-memory file-like object'
-                buffer = BytesIO()
-                # Compress 'yaml' files
-                try:
-                    with tarfile.open(fileobj=buffer, mode='w:gz') as tf:
-                        # Write the file to the in-memory tar
-                        file_name = os.path.relpath(f[0], start=directory)
-                        tf.add(f[0], file_name)
-                except:
-                    raise Exception('Error occurs!')
-
-                # Change the stream position to the start
-                buffer.seek(0)
-
-                # Upload the compressed file by chunks
+                    logger.info(traceback.format_exc())
+                    raise
+            else:
                 chunk_size = 1024 * 1024 * 4
                 index = 0
                 for chunk, whether_last in iter_read_chunks(buffer, chunk_size=chunk_size):
@@ -80,8 +81,7 @@ def upload_directory(directory, upload_url, index_mtime=None):
                     headers['Chunk-Index'] = str(index)
                     headers['Chunk-Offset'] = str(offset)
                     headers['File-Index'] = str(file_index)
-                    if index_mtime is not None:
-                        headers['Index-Mtime'] = str(index_mtime)
+                    headers['Index-Mtime'] = str(index_mtime)
                     if whether_last:
                         headers['Last-Chunk'] = 'True'
                     if last_file:
@@ -94,7 +94,7 @@ def upload_directory(directory, upload_url, index_mtime=None):
                     except:
                         raise Exception('Error occurs when uploading a file bigger than 50 MB!')
 
-                buffer.close()
+            buffer.close()
 
     # Compress small files as one and post it
     if small_files:
@@ -102,11 +102,7 @@ def upload_directory(directory, upload_url, index_mtime=None):
         headers = {
                     'Authorization': 'Bearer {}'.format(os.environ['PLUGIN_TOKEN'])
                 }
-        if index_mtime is not None:
-            data = {'index_mtime': index_mtime}
-        else:
-            data = dict() 
-        data['compression_file'] = True
+        data = {'index_mtime': index_mtime}
         last_file = small_files[-1][0]  # Record the last file
 
         compress_files_upload(small_files, last_file, directory, 4*1024*1024, upload_url, headers, data)
@@ -223,17 +219,26 @@ def compress_files_upload(file_list, last_file, rel_path_start, buff_size_thresh
     # Generate the buffer of the compression file that contains the files in the file_list
     buffer = tar_filelist_buffer(file_list, rel_path_start)
 
-    if len(buffer.getbuffer()) <= buff_size_threshold or len(file_list) == 1:  # post the buffer
+    buffer.seek(0,os.SEEK_END)
+    pos = buffer.tell()
+    print('size of the buffer:',pos)
+    # Change the stream position to the start
+    buffer.seek(0)
+
+    if pos <= buff_size_threshold or len(file_list) == 1:  # post the buffer
         files = {'file': buffer.getvalue()}
         if file_list[-1][0] == last_file:
             data['last_file'] = True
+        else:
+            data['last_file'] = False
         try:
             response = requests.post(upload_url, headers=headers, data=data, files=files)
-            if 'last_file' in data:
+            if data['last_file']:
                 print(response.text)
-        except Exception as e:
-            print('Error occurs when uploading a compression file!')
-            raise Exception('Error occurs when uploading a compression file!')
+                print('Upload Done!')
+        except:
+            logger.info(traceback.format_exc())
+            raise
         buffer.close()
 
     else:  # Divide the file_list as two subsets and call the function for each subset
