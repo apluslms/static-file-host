@@ -57,7 +57,6 @@ def whether_can_upload(content_type, course_dir, temp_course_dir):
 def upload_octet_stream(temp_course_dir):
     """ Upload file data posted by a request with octet-stream content-type to the temp course directory
     """
-
     # parse data
     try:
         data = request.data
@@ -89,34 +88,22 @@ def upload_form_data(data, file, temp_course_dir):
     """ Upload file data posted by a request with form-data content-type to the temp course directory
     """
     try:
-        # write the non-compression file
-        if 'compression_file' not in data:
-            file_name = os.path.join(temp_course_dir, data['file_name'])
-            os.makedirs(os.path.dirname(file_name), exist_ok=True)
-            with open(file_name, 'wb') as f:
-                chunk_size = 4096
-                while True:
-                    chunk = file.stream.read(chunk_size)
-                    if len(chunk) == 0:
-                        break
-                    f.write(chunk)
-        else:
-            # write the compressed file
-            os.makedirs(temp_course_dir, exist_ok=True)
-            temp_compressed = os.path.join(temp_course_dir, 'temp.tar.gz')
-            with open(temp_compressed, 'wb') as f:
-                chunk_size = 4096
-                while True:
-                    chunk = file.stream.read(chunk_size)
-                    if len(chunk) == 0:
-                        break
-                    f.write(chunk)
+        # write the compressed file
+        os.makedirs(temp_course_dir, exist_ok=True)
+        temp_compressed = os.path.join(temp_course_dir, 'temp.tar.gz')
+        with open(temp_compressed, 'wb') as f:
+            chunk_size = 4096
+            while True:
+                chunk = file.stream.read(chunk_size)
+                if len(chunk) == 0:
+                    break
+                f.write(chunk)
 
-            # extract the compression file
-            with tarfile.open(temp_compressed, "r:gz") as tf:
-                tf.extractall(temp_course_dir)
+        # extract the compression file
+        with tarfile.open(temp_compressed, "r:gz") as tf:
+            tf.extractall(temp_course_dir)
 
-            os.remove(temp_compressed)  # delete the compression file
+        os.remove(temp_compressed)  # delete the compression file
     except:
         if os.path.exists(temp_course_dir):
             shutil.rmtree(temp_course_dir)

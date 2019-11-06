@@ -78,7 +78,6 @@ def static_upload(course_name):
     """
         Upload/Update static files of a course
     """
-    print(request.headers)
     auth = authenticate()
 
     # the absolute path of the course in the server
