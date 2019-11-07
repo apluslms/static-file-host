@@ -229,8 +229,6 @@ def compress_files_upload(file_list, last_file, rel_path_start, buff_size_thresh
         files = {'file': buffer.getvalue()}
         if file_list[-1][0] == last_file:
             data['last_file'] = True
-        else:
-            data['last_file'] = False
         try:
             response = requests.post(upload_url, headers=headers, data=data, files=files)
             if data['last_file']:
