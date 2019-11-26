@@ -1,6 +1,7 @@
 import os
 import logging
 import traceback
+import shutil
 
 from flask import request, jsonify
 import jwt
@@ -15,6 +16,7 @@ from static_management.utils import (
     upload_octet_stream,
     upload_form_data,
     update_course_dir,
+    update_course_dir2,
     error_print,
     ImproperlyConfigured,
 )
@@ -73,6 +75,52 @@ def index():
     return "Static File Management Server"
 
 
+@app.route('/<course_name>/file_manifest', methods=['GET', 'POST'])
+def file_manifest(course_name):
+    """
+        compare manifest of static files of a course
+        between the client side and the server side
+    """
+    auth = authenticate()
+
+    # the absolute path of the course in the server
+    static_file_path = app.config.get('STATIC_FILE_PATH')
+    if not static_file_path:
+        return ImproperlyConfigured('STATIC_FILE_PATH not configured')
+
+    data = dict({'course_instance': auth['sub']})
+
+    course_directory = os.path.join(static_file_path, course_name)
+
+    if not os.path.exists(course_directory) or not os.path.isdir(course_directory):
+        data['exist'] = False
+        return jsonify(**data), 200
+
+    data['exist'] = True
+
+    # try:
+    #     file = request.files['manifest']
+    #     manifest_client = json.load(file)
+    #     print(manifest_client)
+    # except:
+    #     logger.info(traceback.format_exc())
+    #     return BadRequest(error_print())
+
+    manifest_srv = dict()
+
+    for basedir, dirs, files in os.walk(course_directory):
+        for filename in files:
+            file = os.path.join(basedir, filename)
+            # manifest = (os.path.getctime(file), os.path.getsize(file) / (1024 * 1024.0))
+            manifest = {"ctime": os.path.getctime(file),
+                        "size": os.path.getsize(file) / (1024 * 1024.0)}
+            manifest_srv[os.path.relpath(file, start=course_directory)] = manifest
+    print(manifest_srv)
+    data['manifest_srv'] = manifest_srv
+
+    return jsonify(**data), 200
+
+
 @app.route('/<course_name>/upload', methods=['GET', 'POST'])
 def static_upload(course_name):
     """
@@ -117,12 +165,14 @@ def static_upload(course_name):
         elif content_type.startswith('multipart/form-data'):
 
             data, file = request.form, request.files['file']
-            upload_form_data(data, file, temp_course_dir)
+            upload_form_data(file, temp_course_dir)
 
             if 'last_file' in data:
-                update_course_dir(course_directory, temp_course_dir)
+                update_course_dir2(course_directory, temp_course_dir)
                 message = 'Upload the course {} successfully'.format(course_name)
     except:
+        if os.path.exists(temp_course_dir):
+            shutil.rmtree(temp_course_dir)
         logger.info(traceback.format_exc())
         return BadRequest(error_print())
 
