@@ -18,12 +18,12 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------------------------------------------------------------
 # Upload handlers
 
-def whether_can_upload(content_type, course_dir, temp_course_dir):
-    """ Check that whether the request data can be uploaded
+def whether_can_download(content_type, course_dir, temp_course_dir):
+    """ Check that whether the request data can be downloaded
     """
 
-    # get the modification time of index.yaml file in the uploaded directory
-    # (the building time of the uploaded dir)
+    # get the modification time of index.yaml file in the client side
+    # (the building time of the course to upload)
     if content_type == 'application/octet-stream':
         try:
             index_mtime = float(request.headers['Index-Mtime'])
@@ -57,8 +57,8 @@ def whether_can_upload(content_type, course_dir, temp_course_dir):
             raise Exception('Error: Another uploading process is prior')
 
 
-def upload_octet_stream(temp_course_dir):
-    """ Upload file data posted by a request with octet-stream content-type to the temp course directory
+def download_octet_stream(temp_course_dir):
+    """ Download file data posted by a request with octet-stream content-type to the temp course directory
     """
     # parse data
     try:
@@ -85,7 +85,7 @@ def upload_octet_stream(temp_course_dir):
         raise
 
 
-def upload_form_data(file, temp_course_dir):
+def download_form_data(file, temp_course_dir):
     """ Upload file data posted by a request with form-data content-type to the temp course directory
     """
     try:
@@ -107,32 +107,6 @@ def upload_form_data(file, temp_course_dir):
         os.remove(temp_compressed)  # delete the compression file
     except:
         raise
-
-
-def update_course_dir(course_dir, temp_course_dir):
-    """ Update the course directory from the temp course directory
-    """
-    if not os.path.exists(course_dir):  # Rename the temp dir
-        logger.info('The course directory does not exist before, will be created')
-        try:
-            os.rename(temp_course_dir, course_dir)
-        except:
-            shutil.rmtree(temp_course_dir)
-            raise
-    else:  # update the existing course dir (atomic)
-        logger.info('The course directory already exists, will be updated')
-        try:
-            os.rename(course_dir, course_dir + '_old')
-        except:
-            shutil.rmtree(temp_course_dir)
-            raise
-        try:
-            os.rename(temp_course_dir, course_dir)
-        except:
-            shutil.rmtree(temp_course_dir)
-            os.rename(course_dir + '_old', course_dir)
-            raise
-        # shutil.rmtree(course_dir + '_old')
 
 
 def _samefile(src, dst):
@@ -207,51 +181,31 @@ def file_move_safe(old_file_name, new_file_name, chunk_size=1024 * 64, allow_ove
             raise
 
 
-def update_course_dir2(course_dir, temp_course_dir):
-
-    # if not os.path.exists(course_dir):  # Rename the temp dir
-    #     logger.info('The course directory does not exist before, will be created')
-    #     try:
-    #         os.rename(temp_course_dir, course_dir)
-    #     except:
-    #         shutil.rmtree(temp_course_dir)
-    #         raise
-    # else:  # update the existing course dir (atomic)
-    #     logger.info('The course directory already exists, will be updated')
-    #
-    #     manifest_compare = dict()
-    #     for basedir, dirs, files in os.walk(temp_course_dir):
-    #         for filename in files:
-    #             old_file_path = os.path.join(basedir, filename)
-    #             rel_file_path = os.path.relpath(old_file_path, start=temp_course_dir)
-    #             new_file_path = os.path.join(course_dir, rel_file_path)
-    #             manifest_compare[rel_file_path] = {"old": ctime(os.path.getctime(old_file_path))}
-    #             file_move_safe(old_file_path, new_file_path)
-    #             manifest_compare[rel_file_path]["new"] = ctime(os.path.getctime(new_file_path))
-    #
-    #     print("manifest comparison before and after update:")
-    #     for k, v in manifest_compare.items():
-    #         print(k, v)
-
+def update_course_dir(course_dir, temp_course_dir):
     try:
         if not os.path.exists(course_dir):  # Rename the temp dir
-            logger.info('The course directory does not exist before, will be created')
+            logger.info('The course directory does not exist before, will be added')
             os.rename(temp_course_dir, course_dir)
+            logger.info("The course is successfully uploaded!")
         else:
             # update the existing course dir (atomic)
             logger.info('The course directory already exists, will be updated')
-            manifest_compare = dict()
+            # manifest_compare = dict()
             for basedir, dirs, files in os.walk(temp_course_dir):
                 for filename in files:
                     old_file_path = os.path.join(basedir, filename)
                     rel_file_path = os.path.relpath(old_file_path, start=temp_course_dir)
                     new_file_path = os.path.join(course_dir, rel_file_path)
-                    manifest_compare[rel_file_path] = {"old": ctime(os.path.getctime(old_file_path))}
+                    # manifest_compare[rel_file_path] = {basedir: ctime(os.path.getctime(old_file_path))}
+                    print(new_file_path, "old:", ctime(os.path.getctime(new_file_path)), end=" ")
                     file_move_safe(old_file_path, new_file_path)
-                    manifest_compare[rel_file_path]["new"] = ctime(os.path.getctime(new_file_path))
-            print("manifest comparison before and after update:")
-            for k, v in manifest_compare.items():
-                print(k, v)
+                    # manifest_compare[rel_file_path][course_dir] = ctime(os.path.getctime(new_file_path))
+                    print("new:", ctime(os.path.getctime(new_file_path)))
+            # print("manifest comparison before and after update:")
+            # for k, v in manifest_compare.items():
+            #     print(k, v)
+            shutil.rmtree(temp_course_dir)
+            logger.info("The course is successfully updated!")
     except:
         raise
 

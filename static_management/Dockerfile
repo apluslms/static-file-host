@@ -3,6 +3,7 @@ FROM apluslms/service-base:python3-1.5
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV SERVER_PATH /srv/static_management
+ENV TZ=Europe/Helsinki
 
 #ENV LISTEN_PORT 5000
 #ENV NGINX_WORKER_PROCESSES auto
@@ -27,7 +28,10 @@ RUN :\
 #    && adduser --system --disabled-password --gecos "static management server,,," --ingroup www-data static_management \
     && chown -R www-data:www-data /srv/static_management \
     && pip3 install -r requirements.txt \
-    && pip3 install uwsgi -I --no-cache-dir
+    && pip3 install uwsgi -I --no-cache-dir \
+#    && echo "Europe/Helsinki" > /etc/timezone \
+#    && dpkg-reconfigure -f noninteractive tzdata
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 #EXPOSE 5000
 #CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]

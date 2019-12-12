@@ -16,7 +16,6 @@ from static_management.utils import (
     upload_octet_stream,
     upload_form_data,
     update_course_dir,
-    update_course_dir2,
     error_print,
     ImproperlyConfigured,
 )
@@ -135,8 +134,7 @@ def static_upload(course_name):
 
     course_directory = os.path.join(static_file_path, course_name)
 
-    message = None  # The message in response
-
+    status = None  # The status in response
     # check request content-type
     content_type = request.content_type
 
@@ -160,7 +158,9 @@ def static_upload(course_name):
 
             if 'Last-File' in request.headers:
                 update_course_dir(course_directory, temp_course_dir)
-                message = 'Upload the course {} successfully'.format(auth['sub'].strip())
+                status = "finish"
+            else:
+                status = "success"
 
         elif content_type.startswith('multipart/form-data'):
 
@@ -168,8 +168,10 @@ def static_upload(course_name):
             upload_form_data(file, temp_course_dir)
 
             if 'last_file' in data:
-                update_course_dir2(course_directory, temp_course_dir)
-                message = 'Upload the course {} successfully'.format(course_name)
+                update_course_dir(course_directory, temp_course_dir)
+                status = "finish"
+            else:
+                status = "success"
     except:
         if os.path.exists(temp_course_dir):
             shutil.rmtree(temp_course_dir)
@@ -178,8 +180,7 @@ def static_upload(course_name):
 
     return jsonify({
         'course_instance': auth['sub'],
-        'status': 'success',
-        'message': message
+        'status': status
     }), 200
 
 
