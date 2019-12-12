@@ -3,7 +3,7 @@ import requests
 from io import BytesIO
 import json
 
-from manifest import files_sizes_list, get_file_manifest, compare_manifest
+from manifest import get_file_manifest, files_to_update_1, files_to_update_2
 from upload import upload_files
 from utils import check_static_directory, error_print
 
@@ -39,15 +39,19 @@ def main():
     try:
         if not manifest_r.json().get("exist"):
             print("The course will be newly added")
-            file_upload = files_sizes_list(static_dir)
+            file_upload = [(static_dir, os.path.getsize(static_dir))]
             upload_files(file_upload, static_dir, upload_url, index_mtime)
         else:
             print("The course already exists")
             manifest_srv = manifest_r.json().get("manifest_srv")
-            # print(manifest_srv)
-            file_upload, file_remove = compare_manifest(manifest_client, manifest_srv)
-            print("number of uploaded files: ", len(file_upload), ",num of deleted files:", len(file_remove))
+
+            # file_upload, file_remove = files_to_update_1(manifest_client, manifest_srv, static_dir)
+            # print("upload {} files, delete {] files".format(len(file_upload), len(file_remove)))
             # print(dict(filter(lambda i: i[0] in file_remove, manifest_srv.items())))
+
+            file_upload = files_to_update_2(manifest_client, manifest_srv, static_dir)
+            print("upload {} files".format(len(file_upload)))
+
             upload_files(file_upload, static_dir, upload_url, index_mtime)
     except:
         return requests.HTTPError(error_print())

@@ -58,12 +58,11 @@ def tar_filelist_buffer(files, basedir):
 
     # Create the in-memory file-like object
     with tarfile.open(fileobj=buffer, mode='w:gz') as tf:
-        for index, file in enumerate(files):
-            file_path = os.path.join(basedir, file[0])
+        for index, f in enumerate(files):
             # print(file_path)
             # Add the file to the tar file
             # 1. 'add' method
-            tf.add(file_path, file[0])
+            tf.add(f[0], os.path.relpath(f[0], start=basedir))
             # 2. 'addfile' method
             # tf.addfile(tarfile.TarInfo(file_name),open(f[0],'rb'))
 
@@ -128,15 +127,15 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
     """
 
     # sub listing the files by their sizes (threshold = 50 MB)
-    big_files = list(filter(lambda x: x[1] > 50.0, files_and_sizes))
-    small_files = list(filter(lambda x: x[1] <= 50.0, files_and_sizes))
+    big_files = list(filter(lambda x: x[1]/(1024 * 1024.0) > 50.0, files_and_sizes))
+    small_files = list(filter(lambda x: x[1]/(1024 * 1024.0) <= 50.0, files_and_sizes))
 
     init_headers = {
         'Authorization': 'Bearer {}'.format(os.environ['PLUGIN_TOKEN'])
     }
     # big files are compressed and uploaded one by one
     if big_files:
-        for file_index, filename in enumerate(big_files):
+        for file_index, f in enumerate(big_files):
 
             headers = init_headers
             if file_index == len(big_files) - 1 and not small_files:
@@ -150,8 +149,7 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
             try:
                 with tarfile.open(fileobj=buffer, mode='w:gz') as tf:
                     # Write the file to the in-memory tar
-                    file_path = os.path.join(basedir, filename)
-                    tf.add(file_path, filename)
+                    tf.add(f[0], os.path.relpath(f[0], start=basedir))
             except:
                 logger.info(traceback.format_exc())
                 raise
