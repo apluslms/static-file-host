@@ -28,7 +28,12 @@ def check_static_directory(directory):
     return static_dir, index_html, index_mtime
 
 
+class UploadError(Exception):
+    pass
+
+
 def error_print():
     return '{}. {}, line: {}'.format(sys.exc_info()[0],
                                      sys.exc_info()[1],
                                      sys.exc_info()[2].tb_lineno)
+

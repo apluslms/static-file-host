@@ -6,6 +6,7 @@ from math import floor
 import traceback
 import logging
 # from time import ctime
+from utils import UploadError
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,10 @@ def compress_files_upload(file_list, last_file, basedir, buff_size_threshold, up
             data['last_file'] = True
         try:
             response = requests.post(upload_url, headers=headers, data=data, files=files)
-            print(response.text)
+            if response.status_code != 200:
+                raise UploadError("Error occurred when uploading")
+            if "last_file" in data:
+                print(response.text)
         except:
             logger.info(traceback.format_exc())
             raise
@@ -190,7 +194,10 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
                     index = offset
                     try:
                         response = requests.post(upload_url, headers=headers, data=chunk)
-                        print(response.text)
+                        if response.status_code != 200:
+                            raise UploadError("Error occurred when uploading {}".format(f[0]))
+                        if last_file:
+                            print(response.text)
                     except:
                         raise
 
