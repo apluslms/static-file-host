@@ -1,24 +1,94 @@
 import os
 import sys
+import math
+import json
 import traceback
 import logging
 import shutil
 import tarfile
 import errno
-from time import ctime
+# from time import ctime
+# from operator import itemgetter
 
-from flask import request
+from flask import request, current_app
 from werkzeug.exceptions import HTTPException
 
+# from . import config
 import static_management.locks as locks
 
 logger = logging.getLogger(__name__)
 
 
+def files_to_update_1(manifest_client, manifest_srv):
+    """
+    :param manifest_client: a nested dict dict[file] = {'size': , 'mtime': } in the client-side (a specific course)
+    :param manifest_srv: a nested dict dict[file] = {'size': , 'mtime': } in the server side
+    :return:
+            a nested dict containing the files of newly added, updated and removed
+    """
+    if not isinstance(manifest_client, dict) or not isinstance(manifest_srv, dict):
+        raise TypeError("The manifest is not a dict type")
+
+    client_files, srv_files = set(manifest_client.keys()), set(manifest_srv.keys())
+
+    files_remove = list(srv_files - client_files)
+    files_new = {f: manifest_client[f] for f in list(client_files - srv_files)
+                 if not math.isclose(manifest_client[f]["mtime"], manifest_srv[f]["mtime"])}
+
+    files_inter = list(client_files.intersection(srv_files))
+    # file_update = [f for f in file_inter if manifest_client[f]["mtime"] > manifest_srv[f]["mtime"]]
+    files_update = {f: manifest_client[f] for f in files_inter
+                    if not math.isclose(manifest_client[f]["mtime"], manifest_srv[f]["mtime"])}
+
+    # file_upload = file_new + file_update
+    files_to_update = {'files_new': files_new, 'files_update': files_update, 'files_remove': files_remove}
+
+    # return file_upload, file_remove
+    return files_to_update
+
+
+def files_to_update_2(manifest_client, manifest_srv):
+    # files = sorted([f for f in manifest_client if f not in manifest_srv or
+    #                manifest_client[f]["mtime"] > manifest_srv[f]["mtime"]])
+    # files = sorted([f for f in manifest_client if f not in manifest_srv or
+    #                 (not math.isclose(manifest_client[f]["mtime"], manifest_srv[f]["mtime"])
+    #                  and manifest_client[f]["mtime"] > manifest_srv[f]["mtime"])])
+    files = sorted([f for f in manifest_client if f not in manifest_srv or
+                    not math.isclose(manifest_client[f]["mtime"], manifest_srv[f]["mtime"])])
+
+    if len(files) == len(manifest_client) and files:
+        return '.'
+
+    filtered = set()
+
+    # go through folders one 'level' at a time, if everything in a folder
+    # is going to be copied, we'll just copy the folder instead of files individually
+    subfolder_level = 1
+    while files:
+        filtered = filtered.union({f for f in files if f.count(os.sep) < subfolder_level})  # files in this level
+        files = [f for f in files if f.count(os.sep) >= subfolder_level]  # files in the subdirs of this level
+        folders = {os.path.dirname(f) for f in files if f.count(os.sep) == subfolder_level}  # subdirs in this level
+        for folder in folders:
+            update_whole_folder = (
+                    len([f for f in files if folder in f]) ==
+                    len([f for f in manifest_client if folder in f]))
+            if update_whole_folder:
+                files = [f for f in files if folder not in f]
+                filtered.add(folder)
+            else:
+                files_in_folder = {f for f in files
+                                   if folder in f and f.count(os.sep) == subfolder_level}
+                files = [f for f in files if f not in files_in_folder]
+                filtered = filtered.union(files_in_folder)
+        subfolder_level += 1
+
+    return list(filtered)
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Upload handlers
 
-def whether_can_download(content_type, course_dir, temp_course_dir):
+
+def whether_can_upload(content_type, course_dir, temp_course_dir):
     """ Check that whether the request data can be downloaded
     """
 
@@ -41,7 +111,7 @@ def whether_can_download(content_type, course_dir, temp_course_dir):
 
     # the course already exists in the grader
     if os.path.exists(course_dir):
-        dir_mtime = os.path.getmtime(course_dir)
+        dir_mtime = os.path.getmtime(course_dir) * 1e6
         # the uploaded directory should be newer than the course directory in the grader
 
         if index_mtime < dir_mtime:
@@ -50,14 +120,14 @@ def whether_can_download(content_type, course_dir, temp_course_dir):
     # a temp course directory exists,
     # meaning that a uploading process is on the halfway
     if os.path.exists(temp_course_dir):
-        temp_dir_ctime = os.path.getctime(temp_course_dir)
+        temp_dir_ctime = os.path.getctime(temp_course_dir) * 1e6
         # if the uploaded directory is later than temp course dir
         # another uploading process is prior
         if index_mtime > temp_dir_ctime:
             raise Exception('Error: Another uploading process is prior')
 
 
-def download_octet_stream(temp_course_dir):
+def upload_octet_stream(temp_course_dir):
     """ Download file data posted by a request with octet-stream content-type to the temp course directory
     """
     # parse data
@@ -85,7 +155,7 @@ def download_octet_stream(temp_course_dir):
         raise
 
 
-def download_form_data(file, temp_course_dir):
+def upload_form_data(file, temp_course_dir):
     """ Upload file data posted by a request with form-data content-type to the temp course directory
     """
     try:
@@ -181,33 +251,101 @@ def file_move_safe(old_file_name, new_file_name, chunk_size=1024 * 64, allow_ove
             raise
 
 
-def update_course_dir(course_dir, temp_course_dir):
+# def update_course_dir(course_dir, temp_course_dir):
+#     try:
+#         if not os.path.exists(course_dir):  # Rename the temp dir
+#             logger.info('The course directory does not exist before, will be added')
+#             os.rename(temp_course_dir, course_dir)
+#             logger.info("The course is successfully uploaded!")
+#         else:
+#             # update the existing course dir (atomic)
+#             logger.info('The course directory already exists, will be updated')
+#             # manifest_compare = dict()
+#             for basedir, dirs, files in os.walk(temp_course_dir):
+#                 for filename in files:
+#                     old_file_path = os.path.join(basedir, filename)
+#                     rel_file_path = os.path.relpath(old_file_path, start=temp_course_dir)
+#                     new_file_path = os.path.join(course_dir, rel_file_path)
+#                     # manifest_compare[rel_file_path] = {basedir: ctime(os.path.getctime(old_file_path))}
+#                     print(new_file_path, "old:", ctime(os.path.getctime(new_file_path)), end=" ")
+#                     file_move_safe(old_file_path, new_file_path)
+#                     # manifest_compare[rel_file_path][course_dir] = ctime(os.path.getctime(new_file_path))
+#                     print("new:", ctime(os.path.getctime(new_file_path)))
+#             # print("manifest comparison before and after update:")
+#             # for k, v in manifest_compare.items():
+#             #     print(k, v)
+#             shutil.rmtree(temp_course_dir)
+#             logger.info("The course is successfully updated!")
+#     except:
+#         raise
+
+
+def update_course_dir(course_dir, temp_course_dir, files_to_update):
+
+    files_new, files_update, files_remove = (files_to_update['files_new'],
+                                             files_to_update['files_update'],
+                                             files_to_update['files_remove'])
+    basedir, course_name = os.path.split(course_dir)
+    manifest_srv_file = os.path.join(current_app.config.get('STATIC_FILE_PATH'), "manifest.json")
+    with open(manifest_srv_file, 'rb') as f:
+        manifest_srv = json.load(f)
     try:
-        if not os.path.exists(course_dir):  # Rename the temp dir
+        if not os.path.exists(course_dir) and not files_update and not files_remove:  # Rename the temp dir
             logger.info('The course directory does not exist before, will be added')
             os.rename(temp_course_dir, course_dir)
+            for base, dirs, files in os.walk(course_dir):
+                for filename in files:
+                    manifest_name = os.path.join(course_name,
+                                                 os.path.join(base, filename).replace(basedir, ''))
+                    manifest_srv[manifest_name] = files_new[manifest_name]
             logger.info("The course is successfully uploaded!")
         else:
             # update the existing course dir (atomic)
             logger.info('The course directory already exists, will be updated')
+
+            # Solution 1: Go through the temp course dir
             # manifest_compare = dict()
+            files_upload = {**files_new, **files_update}
+
             for basedir, dirs, files in os.walk(temp_course_dir):
                 for filename in files:
                     old_file_path = os.path.join(basedir, filename)
                     rel_file_path = os.path.relpath(old_file_path, start=temp_course_dir)
                     new_file_path = os.path.join(course_dir, rel_file_path)
-                    # manifest_compare[rel_file_path] = {basedir: ctime(os.path.getctime(old_file_path))}
-                    print(new_file_path, "old:", ctime(os.path.getctime(new_file_path)), end=" ")
+                    # print(new_file_path, "old:", ctime(os.path.getmtime(new_file_path)))
                     file_move_safe(old_file_path, new_file_path)
-                    # manifest_compare[rel_file_path][course_dir] = ctime(os.path.getctime(new_file_path))
-                    print("new:", ctime(os.path.getctime(new_file_path)))
-            # print("manifest comparison before and after update:")
-            # for k, v in manifest_compare.items():
-            #     print(k, v)
-            shutil.rmtree(temp_course_dir)
+                    # Update the manifest json file
+                    manifest_srv[os.path.join(course_name, rel_file_path)] = files_upload[os.path.join(course_name,
+                                                                                                       rel_file_path)]
+            # # Solution 2: Go through the files_new and files_update dicts
+            # for f in list(files_new.keys()):
+            #     shutil.move(os.path.join(temp_course_dir,  f.replace(course_name + os.sep, '')),
+            #                 os.path.join(basedir, f))
+            #     manifest_srv[f] = files_new[f]
+            # for f in list(files_update.keys()):
+            #     shutil.move(os.path.join(temp_course_dir, f.replace(course_name + os.sep, '')),
+            #                 os.path.join(basedir, f))
+            #     manifest_srv[f] = files_update[f]
+
+            if not os.listdir(temp_course_dir):
+                shutil.rmtree(temp_course_dir)
+
+            # Remove old files
+            for f in files_remove:
+                # os.remove(os.path.join(course_dir, f.replace(course_name + os.sep, '')))
+                os.remove(os.path.join(basedir, f))
+                del manifest_srv[f]
+
+            # update the manifest json file (atomic)
+            with open("manifest_modifiedby_{}.json".format(course_name), 'wb') as f:
+                json.dump(manifest_srv, f)
+
+            os.replace("manifest_modifiedby_{}.json".format(course_name), manifest_srv_file)
+
             logger.info("The course is successfully updated!")
     except:
         raise
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 

@@ -2,6 +2,7 @@ import os
 import logging
 import traceback
 import shutil
+import json
 
 from flask import request, jsonify
 import jwt
@@ -12,6 +13,7 @@ from static_management import (
     prepare_decoder,
 )
 from static_management.utils import (
+    files_to_update_1,
     whether_can_upload,
     upload_octet_stream,
     upload_form_data,
@@ -74,8 +76,8 @@ def index():
     return "Static File Management Server"
 
 
-@app.route('/<course_name>/file_manifest', methods=['GET', 'POST'])
-def file_manifest(course_name):
+@app.route('/<course_name>/get_files_to_update', methods=['GET', 'POST'])
+def get_files_to_update(course_name):
     """
         compare manifest of static files of a course
         between the client side and the server side
@@ -87,7 +89,7 @@ def file_manifest(course_name):
     if not static_file_path:
         return ImproperlyConfigured('STATIC_FILE_PATH not configured')
 
-    data = dict({'course_instance': auth['sub']})
+    data = {'course_instance': auth['sub']}
 
     course_directory = os.path.join(static_file_path, course_name)
 
@@ -97,25 +99,35 @@ def file_manifest(course_name):
 
     data['exist'] = True
 
-    # try:
-    #     file = request.files['manifest']
-    #     manifest_client = json.load(file)
-    #     print(manifest_client)
-    # except:
-    #     logger.info(traceback.format_exc())
-    #     return BadRequest(error_print())
+    try:
+        file = request.files['manifest_client']
+        manifest_client = json.load(file)
+        print("manifest of the files in the client side:\n", manifest_client)
+    except:
+        logger.info(traceback.format_exc())
+        return BadRequest(error_print())
 
-    manifest_srv = dict()
+    # manifest_srv = dict()
+    #
+    # for basedir, dirs, files in os.walk(course_directory):
+    #     for filename in files:
+    #         file = os.path.join(basedir, filename)
+    #         # manifest = (os.path.getmtime(file), os.path.getsize(file))
+    #         manifest = {"mtime": os.path.getmtime(file),
+    #                     "size": os.path.getsize(file)}
+    #         manifest_srv[os.path.relpath(file, start=course_directory)] = manifest
+    # # print(manifest_srv)
+    # data['manifest_srv'] = manifest_srv
 
-    for basedir, dirs, files in os.walk(course_directory):
-        for filename in files:
-            file = os.path.join(basedir, filename)
-            # manifest = (os.path.getctime(file), os.path.getsize(file) / (1024 * 1024.0))
-            manifest = {"ctime": os.path.getctime(file),
-                        "size": os.path.getsize(file) / (1024 * 1024.0)}
-            manifest_srv[os.path.relpath(file, start=course_directory)] = manifest
-    print(manifest_srv)
-    data['manifest_srv'] = manifest_srv
+    with open(os.path.join(static_file_path, 'manifest.json'), 'rb') as manifest_srv_file:
+        manifest_srv = json.load(manifest_srv_file)
+
+    course_manifest_srv = [f for f in manifest_srv if f.split(os.sep)[0] == course_name]
+    files_to_update = files_to_update_1(manifest_client, course_manifest_srv)
+    data['files_new'], data['files_update'] = files_to_update['files_new'], files_to_update['files_update']
+    # Store the files will be updated in a temp json file
+    with open(os.path.join(static_file_path, course_name, '_files_to_update.json'), 'wb') as f:
+        json.dump(files_to_update, f, sort_keys=True, indent=4)
 
     return jsonify(**data), 200
 
@@ -157,7 +169,12 @@ def static_upload(course_name):
             upload_octet_stream(temp_course_dir)
 
             if 'Last-File' in request.headers:
-                update_course_dir(course_directory, temp_course_dir)
+                with open(os.path.join(static_file_path, course_name, '_files_to_update.json'), 'rb') as f:
+                    files_to_update = json.load(f)
+                print("update the course dir, the files_to_update:")
+                print(files_to_update)
+                update_course_dir(course_directory, temp_course_dir, files_to_update)
+                os.remove(os.path.join(static_file_path, course_name, '_files_to_update.json'))
                 status = "finish"
             else:
                 status = "success"
@@ -168,13 +185,20 @@ def static_upload(course_name):
             upload_form_data(file, temp_course_dir)
 
             if 'last_file' in data:
-                update_course_dir(course_directory, temp_course_dir)
+                with open(os.path.join(static_file_path, course_name, '_files_to_update.json'), 'rb') as f:
+                    files_to_update = json.load(f)
+                print("update the course dir, the files_to_update:")
+                print(files_to_update)
+                update_course_dir(course_directory, temp_course_dir, files_to_update)
+                os.remove(os.path.join(static_file_path, course_name, '_files_to_update.json'))
                 status = "finish"
             else:
                 status = "success"
     except:
         if os.path.exists(temp_course_dir):
             shutil.rmtree(temp_course_dir)
+        if os.path.exists(os.path.join(static_file_path, course_name, '_files_to_update.json')):
+            os.remove(os.path.join(static_file_path, course_name, '_files_to_update.json'))
         logger.info(traceback.format_exc())
         return BadRequest(error_print())
 
