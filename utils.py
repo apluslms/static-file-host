@@ -23,7 +23,7 @@ def check_static_directory(directory):
     elif not os.path.exists(index_html):
         raise FileNotFoundError("No '_build/html/index.yaml' file")
 
-    index_mtime = os.path.getctime(index_html)
+    index_mtime = os.path.getmtime(index_html) * 1e6
 
     return static_dir, index_html, index_mtime
 

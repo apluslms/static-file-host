@@ -64,6 +64,8 @@ def tar_filelist_buffer(files, basedir):
             # Add the file to the tar file
             # 1. 'add' method
             tf.add(f[0], os.path.relpath(f[0], start=basedir))
+            # tf.add(f[0], os.path.join(os.environ['PLUGIN_COURSE'],
+            #                           os.path.relpath(f[0], start=basedir)))
             # 2. 'addfile' method
             # tf.addfile(tarfile.TarInfo(file_name),open(f[0],'rb'))
 
@@ -94,7 +96,7 @@ def compress_files_upload(file_list, last_file, basedir, buff_size_threshold, up
 
     buffer.seek(0, os.SEEK_END)
     pos = buffer.tell()
-    print('size of the buffer:', pos)
+    # print('size of the buffer:', pos)
     # Change the stream position to the start
     buffer.seek(0)
 
@@ -105,10 +107,12 @@ def compress_files_upload(file_list, last_file, basedir, buff_size_threshold, up
         try:
             response = requests.post(upload_url, headers=headers, data=data, files=files)
             if response.status_code != 200:
+                # Send a signal to the server
                 raise UploadError("Error occurred when uploading")
-            if "last_file" in data:
+            elif "last_file" in data:
                 print(response.text)
         except:
+            # Send a signal to the server to clean up
             logger.info(traceback.format_exc())
             raise
         buffer.close()
@@ -123,16 +127,11 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
     """ 1. the files bigger than 50MB are compressed one by one,
         and the smaller files are collected to fill a quota (50MB) and then compressed
         2. the compression file smaller than 4MB is posted directly, otherwise posted by chunks
-
-    Arguments:
-        directory {str} -- path of the course directory
-        upload_url {str} -- url uploading to
-        index_mtime {float} -- modification time of the index file (possibly no need to check)
     """
 
     # sub listing the files by their sizes (threshold = 50 MB)
-    big_files = list(filter(lambda x: x[1]/(1024 * 1024.0) > 50.0, files_and_sizes))
-    small_files = list(filter(lambda x: x[1]/(1024 * 1024.0) <= 50.0, files_and_sizes))
+    big_files = list(filter(lambda x: x[1] > 50.0 * (1024 * 1024), files_and_sizes))
+    small_files = list(filter(lambda x: x[1] <= 50.0 * (1024 * 1024), files_and_sizes))
 
     init_headers = {
         'Authorization': 'Bearer {}'.format(os.environ['PLUGIN_TOKEN'])
@@ -149,11 +148,14 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
 
             # Create the in-memory file-like object'
             buffer = BytesIO()
-            # Compress 'yaml' files
+            # Compress files
             try:
                 with tarfile.open(fileobj=buffer, mode='w:gz') as tf:
                     # Write the file to the in-memory tar
                     tf.add(f[0], os.path.relpath(f[0], start=basedir))
+                    # tf.add(f[0], os.path.join(os.environ['PLUGIN_COURSE'],
+                    #                           os.path.relpath(f[0], start=basedir)))
+                    # tf.add(os.path.join(basedir, f[0]), f[0])
             except:
                 logger.info(traceback.format_exc())
                 raise
@@ -163,16 +165,20 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
             pos = buffer.tell()
             # Change the stream position to the start
             buffer.seek(0)
-            print("length of the buffer: ", pos)
+            # print("length of the buffer: ", pos)
 
             # Upload the compressed file by chunks
-            if (pos / (1024 * 1024.0)) <= 4.0:
+            if pos <= 4.0 * (1024 * 1024):
                 # upload the whole compressed file
-                files = {'file': buffer.getvalue()}
+                file = {'file': buffer.getvalue()}
                 data = {'last_file': last_file}
                 try:
-                    response = requests.post(upload_url, headers=headers, data=data, files=files)
-                    print(response.text)
+                    response = requests.post(upload_url, headers=headers, data=data, files=file)
+                    if response.status_code != 200:
+                        # Send a signal to abort the uploading process
+                        raise UploadError(response.text)
+                    elif last_file:
+                        print(response.text)
                 except:
                     logger.info(traceback.format_exc())
                     raise
@@ -195,8 +201,9 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
                     try:
                         response = requests.post(upload_url, headers=headers, data=chunk)
                         if response.status_code != 200:
+                            # Send a signal to the server
                             raise UploadError("Error occurred when uploading {}".format(f[0]))
-                        if last_file:
+                        elif last_file:
                             print(response.text)
                     except:
                         raise
