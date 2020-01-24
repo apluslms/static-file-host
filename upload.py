@@ -108,7 +108,7 @@ def compress_files_upload(file_list, last_file, basedir, buff_size_threshold, up
             response = requests.post(upload_url, headers=headers, data=data, files=files)
             if response.status_code != 200:
                 # Send a signal to the server
-                raise UploadError("Error occurred when uploading")
+                raise UploadError(response.text)
             elif "last_file" in data:
                 print(response.text)
         except:

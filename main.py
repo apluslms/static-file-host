@@ -19,13 +19,14 @@ def main():
     static_dir, index_html, index_mtime = check_static_directory(os.getcwd())
     manifest_client = get_file_manifest(static_dir, os.environ['PLUGIN_COURSE'])
     print("manifests in the client side:")
-    print(manifest_client)
+    pp.pprint(manifest_client)
 
     manifest_compare_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/get_files_to_update'
 
     # Create the in-memory file-like object
     buffer = BytesIO()
     buffer.write(json.dumps(manifest_client).encode('utf-8'))
+    buffer.seek(0)
     # json.dump(manifest_client, buffer)
     headers = {
         'Authorization': 'Bearer {}'.format(os.environ['PLUGIN_TOKEN'])
@@ -33,7 +34,7 @@ def main():
 
     # get the manifest of files in the server side
     compare_r = requests.post(manifest_compare_url, headers=headers,
-                              files={"manifest_client": buffer})
+                              files={"manifest_client": buffer.getvalue()})
 
     if compare_r.status_code != 200:
         return requests.HTTPError(compare_r.text)
