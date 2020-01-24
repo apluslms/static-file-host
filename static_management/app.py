@@ -3,6 +3,7 @@ import logging
 import traceback
 import shutil
 import json
+import pprint
 
 from flask import request, jsonify
 import jwt
@@ -22,6 +23,7 @@ from static_management.utils import (
     ImproperlyConfigured,
 )
 
+pp = pprint.PrettyPrinter(indent=4)
 
 logger = logging.getLogger(__name__)
 
@@ -93,19 +95,31 @@ def get_files_to_update(course_name):
 
     course_directory = os.path.join(static_file_path, course_name)
 
-    if not os.path.exists(course_directory) or not os.path.isdir(course_directory):
-        data['exist'] = False
-        return jsonify(**data), 200
-
-    data['exist'] = True
+    manifest_json = os.path.join(static_file_path, 'manifest.json')
+    if not os.path.exists(manifest_json):
+        open(manifest_json, 'wb').close()
 
     try:
-        file = request.files['manifest_client']
-        manifest_client = json.load(file)
+        file = request.files['manifest_client'].read()
+        manifest_client = json.loads(file.decode('utf-8'))
+        # manifest_client = json.load(file)
         print("manifest of the files in the client side:\n", manifest_client)
     except:
         logger.info(traceback.format_exc())
         return BadRequest(error_print())
+
+    if not os.path.exists(course_directory) or not os.path.isdir(course_directory):
+        files_to_update = {'files_new': manifest_client,
+                           'files_update': {},
+                           'files_remove': {}}
+        # Store the files will be updated in a temp json file
+        with open(os.path.join(static_file_path, course_name + '_files_to_update.json'), 'w') as f:
+            # f.write(json.dumps(files_to_update, sort_keys=True, indent=4))
+            json.dump(files_to_update, f, sort_keys=True, indent=4)
+        data['exist'] = False
+        return jsonify(**data), 200
+
+    data['exist'] = True
 
     # manifest_srv = dict()
     #
@@ -126,7 +140,7 @@ def get_files_to_update(course_name):
     files_to_update = files_to_update_1(manifest_client, course_manifest_srv)
     data['files_new'], data['files_update'] = files_to_update['files_new'], files_to_update['files_update']
     # Store the files will be updated in a temp json file
-    with open(os.path.join(static_file_path, course_name, '_files_to_update.json'), 'wb') as f:
+    with open(os.path.join(static_file_path, course_name+'_files_to_update.json'), 'wb') as f:
         json.dump(files_to_update, f, sort_keys=True, indent=4)
 
     return jsonify(**data), 200
@@ -169,12 +183,12 @@ def static_upload(course_name):
             upload_octet_stream(temp_course_dir)
 
             if 'Last-File' in request.headers:
-                with open(os.path.join(static_file_path, course_name, '_files_to_update.json'), 'rb') as f:
+                with open(os.path.join(static_file_path, course_name+'_files_to_update.json'), 'rb') as f:
                     files_to_update = json.load(f)
                 print("update the course dir, the files_to_update:")
                 print(files_to_update)
                 update_course_dir(course_directory, temp_course_dir, files_to_update)
-                os.remove(os.path.join(static_file_path, course_name, '_files_to_update.json'))
+                os.remove(os.path.join(static_file_path, course_name+'_files_to_update.json'))
                 status = "finish"
             else:
                 status = "success"
@@ -185,20 +199,20 @@ def static_upload(course_name):
             upload_form_data(file, temp_course_dir)
 
             if 'last_file' in data:
-                with open(os.path.join(static_file_path, course_name, '_files_to_update.json'), 'rb') as f:
+                with open(os.path.join(static_file_path, course_name+'_files_to_update.json'), 'rb') as f:
                     files_to_update = json.load(f)
                 print("update the course dir, the files_to_update:")
                 print(files_to_update)
                 update_course_dir(course_directory, temp_course_dir, files_to_update)
-                os.remove(os.path.join(static_file_path, course_name, '_files_to_update.json'))
+                os.remove(os.path.join(static_file_path, course_name+'_files_to_update.json'))
                 status = "finish"
             else:
                 status = "success"
     except:
         if os.path.exists(temp_course_dir):
             shutil.rmtree(temp_course_dir)
-        if os.path.exists(os.path.join(static_file_path, course_name, '_files_to_update.json')):
-            os.remove(os.path.join(static_file_path, course_name, '_files_to_update.json'))
+        if os.path.exists(os.path.join(static_file_path, course_name+'_files_to_update.json')):
+            os.remove(os.path.join(static_file_path, course_name+'_files_to_update.json'))
         logger.info(traceback.format_exc())
         return BadRequest(error_print())
 
