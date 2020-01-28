@@ -102,11 +102,11 @@ class TestCourseUpload(unittest.TestCase):
         # Test the access to a course dir
         check_static_directory(course_dir)
 
-    def test_get_files_to_update(self):
+    def get_files_to_update(self):
         static_dir, index_html, index_mtime = check_static_directory(self.test_data['course_dir'])
         manifest_client = get_file_manifest(static_dir, os.environ['PLUGIN_COURSE'])
-        print("manifests in the client side:")
-        pp.pprint(manifest_client)
+        # print("manifests in the client side:")
+        # pp.pprint(manifest_client)
 
         url = (os.environ['PLUGIN_API']
                + os.environ['PLUGIN_COURSE']
@@ -120,34 +120,28 @@ class TestCourseUpload(unittest.TestCase):
         res = requests.post(url, headers=self.test_data['headers'],
                             files={"manifest_client": buffer.getvalue()})
 
-        print(res.text)
+        return res, manifest_client
+
+    def test_get_files_to_update(self):
+        res, manifest_client = self.get_files_to_update()
 
         assert res.status_code == 200
+        assert res.json().get("course_instance") == "def_course"
+        return manifest_client
 
-    # def test_first_upload(self):
-    #
-    #     static_dir, index_html, index_mtime = check_static_directory(self.test_data['course_dir'])
-    #     manifest_client = get_file_manifest(static_dir, os.environ['PLUGIN_COURSE'])
-    #
-    #     get_files_url = (os.environ['PLUGIN_API']
-    #                      + os.environ['PLUGIN_COURSE']
-    #                      + self.test_data['path']['files_to_update'])
-    #
-    #     # Create the in-memory file-like object
-    #     buffer = BytesIO()
-    #     buffer.write(json.dumps(manifest_client).encode('utf-8'))
-    #     # json.dump(manifest_client, buffer)
-    #
-    #     # get the manifest of files in the server side
-    #     get_files_r = requests.post(get_files_url, headers=self.test_data['headers'],
-    #                                 files={"manifest_client": buffer})
-    #     assert get_files_r.status_code == 200
-    #
-    #     upload_url = (os.environ['PLUGIN_API']
-    #                   + os.environ['PLUGIN_COURSE']
-    #                   + '/upload')
-    #     files_upload = [(static_dir, os.path.getsize(static_dir))]
-    #     upload_files(files_upload, static_dir, upload_url, index_mtime)
+    def test_first_upload(self):
+        get_files_r, manifest_client = self.get_files_to_update()
+        print(get_files_r.text)
+        assert get_files_r.status_code == 200
+        assert get_files_r.json().get("exist") is False
+        assert get_files_r.json().get("course_instance") == "def_course"
+
+        upload_url = (os.environ['PLUGIN_API']
+                      + os.environ['PLUGIN_COURSE']
+                      + '/upload')
+        static_dir, index_html, index_mtime = check_static_directory(self.test_data['course_dir'])
+        files_upload = [(static_dir, os.path.getsize(static_dir))]
+        upload_files(files_upload, static_dir, upload_url, index_mtime)
 
     # def test_upload_after_first_time(self):
 
