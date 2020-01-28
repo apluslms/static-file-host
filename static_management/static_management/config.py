@@ -1,10 +1,10 @@
-from os.path import dirname, join
+from os.path import abspath, dirname, join
 
 
 class Config(object):
     DEBUG = False
     TESTING = False
-    BASE_DIR = dirname(dirname(__file__))
+    BASE_DIR = dirname(dirname(abspath(__file__)))
     STATIC_FILE_PATH = join(BASE_DIR, 'courses')
     JWT_ALGORITHM = "RS256"
     JWT_ISSUER = "shepherd"

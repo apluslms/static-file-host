@@ -7,6 +7,7 @@ import logging
 import shutil
 import tarfile
 import errno
+import pprint
 # from time import ctime
 # from operator import itemgetter
 
@@ -15,6 +16,8 @@ from werkzeug.exceptions import HTTPException
 
 # from . import config
 import static_management.locks as locks
+
+pp = pprint.PrettyPrinter(indent=4)
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +35,7 @@ def files_to_update_1(manifest_client, manifest_srv):
     client_files, srv_files = set(manifest_client.keys()), set(manifest_srv.keys())
 
     files_remove = list(srv_files - client_files)
-    files_new = {f: manifest_client[f] for f in list(client_files - srv_files)
-                 if not math.isclose(manifest_client[f]["mtime"], manifest_srv[f]["mtime"])}
+    files_new = {f: manifest_client[f] for f in list(client_files - srv_files)}
 
     files_inter = list(client_files.intersection(srv_files))
     # file_update = [f for f in file_inter if manifest_client[f]["mtime"] > manifest_srv[f]["mtime"]]
@@ -281,27 +283,41 @@ def file_move_safe(old_file_name, new_file_name, chunk_size=1024 * 64, allow_ove
 
 
 def update_course_dir(course_dir, temp_course_dir, files_to_update):
-
     files_new, files_update, files_remove = (files_to_update['files_new'],
                                              files_to_update['files_update'],
                                              files_to_update['files_remove'])
     basedir, course_name = os.path.split(course_dir)
+    print(basedir, course_name)
     manifest_srv_file = os.path.join(current_app.config.get('STATIC_FILE_PATH'), "manifest.json")
-    with open(manifest_srv_file, 'rb') as f:
+    with open(manifest_srv_file, 'r') as f:
         manifest_srv = json.load(f)
+    print("manifest_srv")
+    print(manifest_srv)
     try:
         if not os.path.exists(course_dir) and not files_update and not files_remove:  # Rename the temp dir
-            logger.info('The course directory does not exist before, will be added')
+            print("The course directory does not exist before, will be added")
+            # logger.info('The course directory does not exist before, will be added')
             os.rename(temp_course_dir, course_dir)
             for base, dirs, files in os.walk(course_dir):
                 for filename in files:
-                    manifest_name = os.path.join(course_name,
-                                                 os.path.join(base, filename).replace(basedir, ''))
+                    manifest_name = os.path.join(base, filename).replace(basedir+os.sep, '')
                     manifest_srv[manifest_name] = files_new[manifest_name]
-            logger.info("The course is successfully uploaded!")
+            # logger.info("The course is successfully uploaded!")
+            print("Final manifest_srv")
+            pp.pprint(manifest_srv)
+            # update the manifest json file (atomic)
+            temp_manifest_file = os.path.join(current_app.config.get('STATIC_FILE_PATH'),
+                                              "manifest_modifiedby_{}.json".format(course_name))
+            with open(temp_manifest_file, 'w') as f:
+                json.dump(manifest_srv, f)
+
+            os.replace(temp_manifest_file, manifest_srv_file)
+
+            print("The course is successfully uploaded!")
         else:
             # update the existing course dir (atomic)
-            logger.info('The course directory already exists, will be updated')
+            # logger.info('The course directory already exists, will be updated')
+            print('The course directory already exists, will be updated')
 
             # Solution 1: Go through the temp course dir
             # manifest_compare = dict()
@@ -336,11 +352,15 @@ def update_course_dir(course_dir, temp_course_dir, files_to_update):
                 os.remove(os.path.join(basedir, f))
                 del manifest_srv[f]
 
+            print("Final manifest_srv")
+            pp.pprint(manifest_srv)
             # update the manifest json file (atomic)
-            with open("manifest_modifiedby_{}.json".format(course_name), 'wb') as f:
+            temp_manifest_file = os.path.join(current_app.config.get('STATIC_FILE_PATH'),
+                                              "manifest_modifiedby_{}.json".format(course_name))
+            with open(temp_manifest_file, 'w') as f:
                 json.dump(manifest_srv, f)
 
-            os.replace("manifest_modifiedby_{}.json".format(course_name), manifest_srv_file)
+            os.replace(temp_manifest_file, manifest_srv_file)
 
             logger.info("The course is successfully updated!")
     except:
