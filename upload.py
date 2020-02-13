@@ -109,7 +109,8 @@ def compress_files_upload(file_list, last_file, basedir, buff_size_threshold, up
             if response.status_code != 200:
                 # Send a signal to the server
                 raise UploadError(response.text)
-            elif "last_file" in data:
+            # if "last_file" in data:
+            if response.json().get('status') == 'finish':
                 print(response.text)
         except:
             # Send a signal to the server to clean up
@@ -161,13 +162,12 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
                 raise
 
             # the current position of the buffer
-            # buffer.seek(0,SEEK_END)
+            buffer.seek(0, os.SEEK_END)
             pos = buffer.tell()
+            # print("length of the buffer: ", pos)
             # Change the stream position to the start
             buffer.seek(0)
-            # print("length of the buffer: ", pos)
 
-            # Upload the compressed file by chunks
             if pos <= 4.0 * (1024 * 1024):
                 # upload the whole compressed file
                 file = {'file': buffer.getvalue()}
@@ -177,12 +177,13 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
                     if response.status_code != 200:
                         # Send a signal to abort the uploading process
                         raise UploadError(response.text)
-                    elif last_file:
+                    # if last_file:
+                    if response.json().get('status') == 'finish':
                         print(response.text)
                 except:
                     logger.info(traceback.format_exc())
                     raise
-            else:
+            else:   # Upload the compressed file by chunks
                 chunk_size = 1024 * 1024 * 4
                 index = 0
                 for chunk, whether_last in iter_read_chunks(buffer, chunk_size=chunk_size):
@@ -203,7 +204,8 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
                         if response.status_code != 200:
                             # Send a signal to the server
                             raise UploadError("Error occurred when uploading {}".format(f[0]))
-                        elif last_file:
+                        # if last_file:
+                        if response.json().get('status') == 'finish':
                             print(response.text)
                     except:
                         raise
