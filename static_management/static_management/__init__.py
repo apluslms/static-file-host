@@ -1,3 +1,5 @@
+import os
+import json
 import logging
 from functools import partial
 
@@ -23,9 +25,17 @@ __version__ = '1.0.0'
 #     static_management.config.from_object(config[config_name])  # object-based default configuration
 #     # static_management.config.from_pyfile('config.py', silent=True)  # instance-folders configuration
 
+def create_app():
+    app = Flask(__name__)
 
-app = Flask(__name__)
-app.config.from_object(config.DevelopmentConfig)
+    app.config.from_object(config.DevelopmentConfig)
+
+    manifest_json = os.path.join(app.config.get('STATIC_FILE_PATH'), 'manifest.json')
+    if not os.path.exists(manifest_json):
+        with open(manifest_json, 'w') as f:
+            json.dump({}, f)
+
+    return app
 
 
 # ----------------------------------------------------------------------------------------------------------------------

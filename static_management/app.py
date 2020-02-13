@@ -4,13 +4,14 @@ import traceback
 import shutil
 import json
 import pprint
+import math
 
 from flask import request, jsonify
 import jwt
 from werkzeug.exceptions import BadRequest, Unauthorized
 
 from static_management import (
-    app,
+    create_app,
     prepare_decoder,
 )
 from static_management.utils import (
@@ -26,6 +27,8 @@ from static_management.utils import (
 pp = pprint.PrettyPrinter(indent=4)
 
 logger = logging.getLogger(__name__)
+
+app = create_app()
 
 jwt_decode = prepare_decoder(app)
 
@@ -95,14 +98,10 @@ def get_files_to_update(course_name):
 
     course_directory = os.path.join(static_file_path, course_name)
 
-    manifest_json = os.path.join(static_file_path, 'manifest.json')
-    if not os.path.exists(manifest_json):
-        with open(manifest_json, 'w') as f:
-            json.dump({}, f)
-
     try:
         file = request.files['manifest_client'].read()
         manifest_client = json.loads(file.decode('utf-8'))
+        # print(manifest_client)
         # manifest_client = json.load(file)
         # print("manifest of the files in the client side:\n", manifest_client)
     except:
@@ -135,8 +134,25 @@ def get_files_to_update(course_name):
     # # print(manifest_srv)
     # data['manifest_srv'] = manifest_srv
 
+    # check whether the index html exists in the client side
+    index_key = os.path.join(course_name, 'index.html')
+    if index_key not in manifest_client:
+        logger.info("The index html file is not found in the newly built course!")
+        return BadRequest("The index html file is not found in the newly built course!")
+
     with open(os.path.join(static_file_path, 'manifest.json'), 'r') as manifest_srv_file:
         manifest_srv = json.load(manifest_srv_file)
+
+    # compare the mtime of the index html file
+    # print(manifest_client[index_key]['mtime'])
+    # print(manifest_srv[index_key]['mtime'])
+    # print(math.isclose(float(manifest_client[index_key]['mtime']), float(manifest_srv[index_key]['mtime'])))
+    # print(float(manifest_client[index_key]['mtime']) < float(manifest_srv[index_key]['mtime']))
+
+    if (math.isclose(manifest_client[index_key]['mtime'], manifest_srv[index_key]['mtime'])
+       or manifest_client[index_key]['mtime'] < manifest_srv[index_key]['mtime']):
+        logger.info("The built version is older than the version in the server")
+        return BadRequest("The built version is older than the version in the server")
 
     course_manifest_srv = {f: manifest_srv[f] for f in manifest_srv if f.split(os.sep)[0] == course_name}
     files_to_update = files_to_update_1(manifest_client, course_manifest_srv)
@@ -166,17 +182,18 @@ def static_upload(course_name):
     # check request content-type
     content_type = request.content_type
 
-    if not (content_type == 'application/octet-stream' or
-            content_type.startswith('multipart/form-data')):
-        logger.warning(content_type)
-        return BadRequest("Unsupported content-type")
+    # if not (content_type == 'application/octet-stream' or
+    #         content_type.startswith('multipart/form-data')):
+    #     logger.warning(content_type)
+    #     return BadRequest("Unsupported content-type")
 
     temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name)
+
     # check whether the data can be uploaded
-    try:
-        whether_can_upload(content_type, course_directory, temp_course_dir)
-    except:
-        return BadRequest(error_print())
+    # try:
+    #     whether_can_upload(content_type, course_directory, temp_course_dir)
+    # except:
+    #     return BadRequest(error_print())
 
     # upload/ update the courses files of a course
     try:
@@ -188,10 +205,11 @@ def static_upload(course_name):
                 with open(os.path.join(static_file_path, course_name+'_files_to_update.json'), 'r') as f:
                     # files_to_update = json.load(f)
                     files_to_update = json.loads(f.read())
-                print("update the course dir, the files_to_update:")
-                pp.pprint(files_to_update)
+                # print("update the course dir, the files_to_update:")
+                # pp.pprint(files_to_update)
                 update_course_dir(course_directory, temp_course_dir, files_to_update)
-                os.remove(os.path.join(static_file_path, course_name+'_files_to_update.json'))
+                if os.path.exists(os.path.join(static_file_path, course_name + '_files_to_update.json')):
+                    os.remove(os.path.join(static_file_path, course_name + '_files_to_update.json'))
                 status = "finish"
             else:
                 status = "success"
@@ -200,23 +218,16 @@ def static_upload(course_name):
 
             data, file = request.form, request.files['file']
             upload_form_data(file, temp_course_dir)
-            print("upload form data successfully")
-
-            if 'last_file' in data:
+            if data.get('last_file') is True or data.get('last_file') == 'True':
                 print("Update the course dir")
                 with open(os.path.join(static_file_path, course_name+'_files_to_update.json'), 'r') as f:
                     # files_to_update = json.load(f)
                     files_to_update = json.loads(f.read())
-                print("update the course dir, the files_to_update:")
-                print(files_to_update)
+                # print("update the course dir, the files_to_update:")
+                # print(files_to_update)
                 update_course_dir(course_directory, temp_course_dir, files_to_update)
-                if os.path.exists(os.path.join(static_file_path, course_name+'_files_to_update.json')):
-                    print("Remove the files_to_update json file")
-                    os.remove(os.path.join(static_file_path, course_name+'_files_to_update.json'))
-                    if os.path.exists(os.path.join(static_file_path, course_name+'_files_to_update.json')):
-                        print("Remove files_to_update json file failed")
-                    else:
-                        print("Remove files_to_update json file successfully")
+                if os.path.exists(os.path.join(static_file_path, course_name + '_files_to_update.json')):
+                    os.remove(os.path.join(static_file_path, course_name + '_files_to_update.json'))
                 status = "finish"
             else:
                 status = "success"
