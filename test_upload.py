@@ -12,9 +12,13 @@ import traceback
 import logging
 from io import BytesIO
 
-from manifest import get_file_manifest
 from upload import upload_files, compress_files_upload, iter_read_chunks
-from utils import check_static_directory, UploadError
+from utils import (get_file_manifest,
+                   check_static_directory,
+                   EnvVarNotFoundError,
+                   examine_env_var,
+                   UploadError,
+                   )
 
 
 logger = logging.getLogger(__name__)
@@ -24,24 +28,6 @@ uri = 'http://0.0.0.0/'
 token = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJkZWZfY291cnNlIiwiaWF0IjoxNTYyODI4MzA0LCJpc3MiOiJzaGVwaGVyZCJ9.MUkoD27P6qZKKMM5juL0e0pZl8OVH6S17N_ZFzC7D0cwOgbcDaAO3S1BauXzhQOneChPs1KEzUxI2dVF-Od_gpN8_IJEnQnk25XmZYecfdoJ5ST-6YonVmUMzKP7UAcvzCFye7mkX7zJ1ADYtda57IUdyaLSPOWnFBSHX5B4XTzzPdVZu1xkRtb17nhA20SUg9gwCOPD6uLU4ml1aOPHBdiMLKz66inI8txPrRK57Gn33m8lVp0WTOOgLV5MkCIpkgVHBl50EHcQFA5KfPet3FBLjpp2I1yThQe_n1Zc6GdnR0v_nqX0JhmmDMOvJ5rhIHZ7B0hEtFy9rKUWOWfcug'
 course = 'def_course'
 course_dir = '/u/71/qinq1/unix/Desktop/my_new_course'
-
-
-class EnvVarNotFoundError(Exception):
-    def __init__(self, *var_name):
-        self.msg = " & ".join(*var_name) + " missing!"
-
-    def __str__(self):
-        return repr(self.msg)
-
-
-def examine_env_var():
-    required = {'PLUGIN_API', 'PLUGIN_TOKEN', 'PLUGIN_COURSE'}
-
-    if required <= os.environ.keys():
-        pass
-    else:
-        missing = [var for var in required if var not in os.environ]
-        raise EnvVarNotFoundError(missing)
 
 
 def test_env_var_missing():

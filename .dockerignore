@@ -1,6 +1,10 @@
+env/
+.github/
+.pytest_cache/
+
 Dockerfile
 .dockerignore
 .gitignore
 
 run.sh
-tests.py
+test_upload.py
