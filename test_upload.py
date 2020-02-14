@@ -245,10 +245,7 @@ class TestCourseUpload(unittest.TestCase):
             data = {'last_file': last_file}
             try:
                 response = requests.post(self.test_data['upload_url'], headers=headers, data=data, files=file)
-                if response.status_code != 200:
-                    # Send a signal to abort the uploading process
-                    raise UploadError(response.text)
-                # if last_file:
+                assert response.status_code == 200
                 if response.json().get('status') == 'finish':
                     print(response.text)
             except:
@@ -313,9 +310,7 @@ class TestCourseUpload(unittest.TestCase):
                 index = offset
                 try:
                     response = requests.post(self.test_data['upload_url'], headers=headers, data=chunk)
-                    if response.status_code != 200:
-                        # Send a signal to the server
-                        raise UploadError("Error occurred when uploading {}".format(f[0]))
+                    assert response.status_code == 200
                     if response.json().get('status') == 'finish':
                         print(response.text)
                 except:
