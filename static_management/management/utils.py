@@ -8,18 +8,18 @@ import shutil
 import tarfile
 import errno
 import pprint
-# from time import ctime
-# from operator import itemgetter
 
 from flask import request, current_app
 from werkzeug.exceptions import HTTPException
 
-# from . import config
-import static_management.locks as locks
+import management.locks as locks
+
 
 pp = pprint.PrettyPrinter(indent=4)
-
 logger = logging.getLogger(__name__)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Get list of the files to update
 
 
 def files_to_update_1(manifest_client, manifest_srv):
@@ -253,35 +253,6 @@ def file_move_safe(old_file_name, new_file_name, chunk_size=1024 * 64, allow_ove
             raise
 
 
-# def update_course_dir(course_dir, temp_course_dir):
-#     try:
-#         if not os.path.exists(course_dir):  # Rename the temp dir
-#             logger.info('The course directory does not exist before, will be added')
-#             os.rename(temp_course_dir, course_dir)
-#             logger.info("The course is successfully uploaded!")
-#         else:
-#             # update the existing course dir (atomic)
-#             logger.info('The course directory already exists, will be updated')
-#             # manifest_compare = dict()
-#             for basedir, dirs, files in os.walk(temp_course_dir):
-#                 for filename in files:
-#                     old_file_path = os.path.join(basedir, filename)
-#                     rel_file_path = os.path.relpath(old_file_path, start=temp_course_dir)
-#                     new_file_path = os.path.join(course_dir, rel_file_path)
-#                     # manifest_compare[rel_file_path] = {basedir: ctime(os.path.getctime(old_file_path))}
-#                     print(new_file_path, "old:", ctime(os.path.getctime(new_file_path)), end=" ")
-#                     file_move_safe(old_file_path, new_file_path)
-#                     # manifest_compare[rel_file_path][course_dir] = ctime(os.path.getctime(new_file_path))
-#                     print("new:", ctime(os.path.getctime(new_file_path)))
-#             # print("manifest comparison before and after update:")
-#             # for k, v in manifest_compare.items():
-#             #     print(k, v)
-#             shutil.rmtree(temp_course_dir)
-#             logger.info("The course is successfully updated!")
-#     except:
-#         raise
-
-
 def update_course_dir(course_dir, temp_course_dir, files_to_update):
     files_new, files_update, files_remove = (files_to_update['files_new'],
                                              files_to_update['files_update'],
@@ -330,9 +301,6 @@ def update_course_dir(course_dir, temp_course_dir, files_to_update):
                     # print(new_file_path, "old:", ctime(os.path.getmtime(new_file_path)))
                     file_move_safe(old_file_path, new_file_path)
                     # Update the manifest json file
-                    print(os.path.join(course_name, rel_file_path))
-                    print('srv:', manifest_srv[os.path.join(course_name, rel_file_path)])
-                    print('client:', files_upload[os.path.join(course_name, rel_file_path)])
                     manifest_srv[os.path.join(course_name, rel_file_path)] = files_upload[os.path.join(course_name,
                                                                                                        rel_file_path)]
             # # Solution 2: Go through the files_new and files_update dicts
@@ -368,7 +336,7 @@ def update_course_dir(course_dir, temp_course_dir, files_to_update):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-
+# Error handling
 
 class ImproperlyConfigured(HTTPException):
     pass

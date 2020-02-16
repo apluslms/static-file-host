@@ -1,8 +1,8 @@
-static_management/venv/
+static_management/env/
 
-*.pyc
 **/__pycache__/
 **/.idea/
+*.pyc
 
 static_management/courses/*
 !static_management/courses/.keep

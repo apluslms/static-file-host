@@ -1,7 +1,7 @@
 from os.path import abspath, dirname, join
 
 
-class Config(object):
+class BaseConfig(object):
     DEBUG = False
     TESTING = False
     BASE_DIR = dirname(dirname(abspath(__file__)))
@@ -22,10 +22,9 @@ class Config(object):
     JWT_PUBLIC_KEY = open('public.pem', 'rb').read()
 
 
-class DevelopmentConfig(Config):
-    # PORT = 5000
+class DevelopmentConfig(BaseConfig):
     DEBUG = True
 
 
-class TestingConfig(Config):
+class TestingConfig(BaseConfig):
     TESTING = True

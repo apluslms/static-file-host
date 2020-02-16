@@ -9,7 +9,7 @@ services:
     environment:
       - APP_NAME=static_management
     expose:
-      - 9090
+      - 9000
   nginx:
     build: ./nginx
     container_name: nginx

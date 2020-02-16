@@ -1,45 +1,14 @@
-import os
-import json
 import logging
 from functools import partial
 
-from flask import Flask
 import jwt
+from flask import request
+from werkzeug.exceptions import BadRequest, Unauthorized
 
-from static_management import config
 from .utils import ImproperlyConfigured
 
 logger = logging.getLogger(__name__)
 
-__version__ = '1.0.0'
-
-# config = {
-#     "development": "static_management.config.DevelopmentConfig",
-#     "testing": "static_management.config.TestingConfig",
-#     "default": "static_management.config.DevelopmentConfig"
-# }
-
-
-# def configure_app(static_management):
-#     config_name = os.getenv('FLASK_CONFIGURATION', 'default')
-#     static_management.config.from_object(config[config_name])  # object-based default configuration
-#     # static_management.config.from_pyfile('config.py', silent=True)  # instance-folders configuration
-
-def create_app():
-    app = Flask(__name__)
-
-    app.config.from_object(config.DevelopmentConfig)
-
-    manifest_json = os.path.join(app.config.get('STATIC_FILE_PATH'), 'manifest.json')
-    if not os.path.exists(manifest_json):
-        with open(manifest_json, 'w') as f:
-            json.dump({}, f)
-
-    return app
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-# JWT Authentication
 
 def setting_in_bytes(app_instance, name):
     value = app_instance.config.get(name)
@@ -81,9 +50,44 @@ def prepare_decoder(app_instance):
     return None
 
 
+def jwt_auth(jwt_decode):
+
+    if jwt_decode is None:
+        raise ImproperlyConfigured(
+            "Received request to %s without JWT_PUBLIC_KEY in settings."
+            % (__name__,))
+
+    # require authentication header
+    if 'Authorization' not in request.headers:
+        logger.debug("JWT auth failed: No authorization header")
+        raise Unauthorized("No authorization header")
+    try:
+        scheme, token = request.headers['Authorization'].strip().split(' ', 1)
+        if scheme.lower() != 'bearer': raise ValueError()
+    except ValueError:
+        logger.debug("JWT auth failed: Invalid authorization header: %r",
+                     request.headers.get('Authorization', ''))
+        raise Unauthorized("Invalid authorization header")
+
+    # decode jwt token
+    try:
+        return jwt_decode(token)
+    except jwt.InvalidTokenError as exc:
+        logger.debug("JWT auth failed: %s", exc)
+        raise Unauthorized(str(exc))
 
 
+def authenticate(jwt_decode):
 
+    course_name = request.view_args['course_name']
+    if not course_name:
+        raise Unauthorized('No valid course name provided')
 
+    auth = jwt_auth(jwt_decode)
 
+    # check the payload
+    if ('sub' not in auth) or (not auth['sub'].strip()):
+        return BadRequest("Invalid payload")
+    assert auth['sub'].strip() == course_name, 'the course name in the url does not match the jwt token'
 
+    return auth

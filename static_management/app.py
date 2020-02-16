@@ -1,20 +1,18 @@
 import os
+import json
+import math
+import shutil
+import pprint
 import logging
 import traceback
-import shutil
-import json
-import pprint
-import math
 
 from flask import request, jsonify
-import jwt
-from werkzeug.exceptions import BadRequest, Unauthorized
+from werkzeug.exceptions import BadRequest
 
-from static_management import (
-    create_app,
-    prepare_decoder,
-)
-from static_management.utils import (
+
+from management import create_app, config
+from management.auth import prepare_decoder, authenticate
+from management.utils import (
     files_to_update_1,
     whether_can_upload,
     upload_octet_stream,
@@ -24,56 +22,16 @@ from static_management.utils import (
     ImproperlyConfigured,
 )
 
+logger = logging.getLogger(__name__)
 pp = pprint.PrettyPrinter(indent=4)
 
-logger = logging.getLogger(__name__)
 
-app = create_app()
+if os.getenv('FLASK_ENV') == 'development':
+    app = create_app(config.DevelopmentConfig)
+else:
+    app = create_app()
 
 jwt_decode = prepare_decoder(app)
-
-
-def jwt_auth():
-
-    if jwt_decode is None:
-        raise ImproperlyConfigured(
-            "Received request to %s without JWT_PUBLIC_KEY in settings."
-            % (__name__,))
-
-    # require authentication header
-    if 'Authorization' not in request.headers:
-        logger.debug("JWT auth failed: No authorization header")
-        raise Unauthorized("No authorization header")
-    try:
-        scheme, token = request.headers['Authorization'].strip().split(' ', 1)
-        if scheme.lower() != 'bearer': raise ValueError()
-    except ValueError:
-        logger.debug("JWT auth failed: Invalid authorization header: %r",
-                     request.headers.get('Authorization', ''))
-        raise Unauthorized("Invalid authorization header")
-
-    # decode jwt token
-    try:
-        return jwt_decode(token)
-    except jwt.InvalidTokenError as exc:
-        logger.debug("JWT auth failed: %s", exc)
-        raise Unauthorized(str(exc))
-
-
-def authenticate():
-
-    course_name = request.view_args['course_name']
-    if not course_name:
-        raise Unauthorized('No valid course name provided')
-
-    auth = jwt_auth()
-
-    # check the payload
-    if ('sub' not in auth) or (not auth['sub'].strip()):
-        return BadRequest("Invalid payload")
-    assert auth['sub'].strip() == course_name, 'the course name in the url does not match the jwt token'
-
-    return auth
 
 
 @app.route('/', methods=['GET'])
@@ -87,7 +45,7 @@ def get_files_to_update(course_name):
         compare manifest of static files of a course
         between the client side and the server side
     """
-    auth = authenticate()
+    auth = authenticate(jwt_decode)
 
     # the absolute path of the course in the server
     static_file_path = app.config.get('STATIC_FILE_PATH')
@@ -101,9 +59,6 @@ def get_files_to_update(course_name):
     try:
         file = request.files['manifest_client'].read()
         manifest_client = json.loads(file.decode('utf-8'))
-        # print(manifest_client)
-        # manifest_client = json.load(file)
-        # print("manifest of the files in the client side:\n", manifest_client)
     except:
         logger.info(traceback.format_exc())
         return BadRequest(error_print())
@@ -122,18 +77,6 @@ def get_files_to_update(course_name):
 
     data['exist'] = True
 
-    # manifest_srv = dict()
-    #
-    # for basedir, dirs, files in os.walk(course_directory):
-    #     for filename in files:
-    #         file = os.path.join(basedir, filename)
-    #         # manifest = (os.path.getmtime(file), os.path.getsize(file))
-    #         manifest = {"mtime": os.path.getmtime(file),
-    #                     "size": os.path.getsize(file)}
-    #         manifest_srv[os.path.relpath(file, start=course_directory)] = manifest
-    # # print(manifest_srv)
-    # data['manifest_srv'] = manifest_srv
-
     # check whether the index html exists in the client side
     index_key = os.path.join(course_name, 'index.html')
     if index_key not in manifest_client:
@@ -142,12 +85,6 @@ def get_files_to_update(course_name):
 
     with open(os.path.join(static_file_path, 'manifest.json'), 'r') as manifest_srv_file:
         manifest_srv = json.load(manifest_srv_file)
-
-    # compare the mtime of the index html file
-    # print(manifest_client[index_key]['mtime'])
-    # print(manifest_srv[index_key]['mtime'])
-    # print(math.isclose(float(manifest_client[index_key]['mtime']), float(manifest_srv[index_key]['mtime'])))
-    # print(float(manifest_client[index_key]['mtime']) < float(manifest_srv[index_key]['mtime']))
 
     if (math.isclose(manifest_client[index_key]['mtime'], manifest_srv[index_key]['mtime'])
        or manifest_client[index_key]['mtime'] < manifest_srv[index_key]['mtime']):
@@ -169,7 +106,7 @@ def static_upload(course_name):
     """
         Upload/Update static files of a course
     """
-    auth = authenticate()
+    auth = authenticate(jwt_decode)
 
     # the absolute path of the course in the server
     static_file_path = app.config.get('STATIC_FILE_PATH')
@@ -182,18 +119,7 @@ def static_upload(course_name):
     # check request content-type
     content_type = request.content_type
 
-    # if not (content_type == 'application/octet-stream' or
-    #         content_type.startswith('multipart/form-data')):
-    #     logger.warning(content_type)
-    #     return BadRequest("Unsupported content-type")
-
     temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name)
-
-    # check whether the data can be uploaded
-    # try:
-    #     whether_can_upload(content_type, course_directory, temp_course_dir)
-    # except:
-    #     return BadRequest(error_print())
 
     # upload/ update the courses files of a course
     try:
@@ -221,10 +147,7 @@ def static_upload(course_name):
             if data.get('last_file') is True or data.get('last_file') == 'True':
                 print("Update the course dir")
                 with open(os.path.join(static_file_path, course_name+'_files_to_update.json'), 'r') as f:
-                    # files_to_update = json.load(f)
                     files_to_update = json.loads(f.read())
-                # print("update the course dir, the files_to_update:")
-                # print(files_to_update)
                 update_course_dir(course_directory, temp_course_dir, files_to_update)
                 if os.path.exists(os.path.join(static_file_path, course_name + '_files_to_update.json')):
                     os.remove(os.path.join(static_file_path, course_name + '_files_to_update.json'))
@@ -246,6 +169,10 @@ def static_upload(course_name):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
-else:
-    application = app
+    if os.getenv('FLASK_ENV') == 'development':
+        app.run(debug=True, host='0.0.0.0', port=9000)
+    else:
+        app.run()
+
+
+

@@ -1,8 +1,10 @@
-venv/
+env/
 
 Dockerfile
 .dockerignore
 .gitignore
+
+**/__pycache__/
 
 courses/*
 !courses/.keep
