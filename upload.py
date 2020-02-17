@@ -171,7 +171,7 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
             if pos <= 4.0 * (1024 * 1024):
                 # upload the whole compressed file
                 file = {'file': buffer.getvalue()}
-                data = {'last_file': last_file}
+                data = {'index_mtime': index_mtime, 'last_file': last_file}
                 try:
                     response = requests.post(upload_url, headers=headers, data=data, files=file)
                     if response.status_code != 200:
@@ -212,8 +212,6 @@ def upload_files(files_and_sizes, basedir, upload_url, index_mtime):
 
             buffer.close()
 
-    # for f in small_files:
-    #     print(f[0], ctime(os.path.getctime(os.path.join(basedir, f[0]))))
     # Compress small files as one and post it
     if small_files:
         # Add the JWT token to the request headers for the authentication purpose
