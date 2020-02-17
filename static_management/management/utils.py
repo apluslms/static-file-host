@@ -38,14 +38,27 @@ def files_to_update_1(manifest_client, manifest_srv):
     files_new = {f: manifest_client[f] for f in list(client_files - srv_files)}
 
     files_inter = list(client_files.intersection(srv_files))
-    # file_update = [f for f in file_inter if manifest_client[f]["mtime"] > manifest_srv[f]["mtime"]]
     files_update = {f: manifest_client[f] for f in files_inter
                     if not math.isclose(manifest_client[f]["mtime"], manifest_srv[f]["mtime"])}
 
-    # file_upload = file_new + file_update
+    # print("The number of intersection of files: ", len(files_inter))
+    # print("The number of updated files: ", len(files_update))
+    # files_inter_dict = dict()
+    # for f in files_inter:
+    #     files_inter_dict[f] = {"client": manifest_client[f]["mtime"],
+    #                            "server": manifest_srv[f]["mtime"]}
+    # files_update_dict = dict()
+    # for f in list(files_update.keys()):
+    #     files_update_dict[f] = {"client": manifest_client[f]["mtime"],
+    #                             "server": manifest_srv[f]["mtime"]}
+    #
+    # print("Intersection of files")
+    # pp.pprint(files_inter_dict)
+    # print("Files to update")
+    # pp.pprint(files_update_dict)
+
     files_to_update = {'files_new': files_new, 'files_update': files_update, 'files_remove': files_remove}
 
-    # return file_upload, file_remove
     return files_to_update
 
 
@@ -111,21 +124,16 @@ def whether_can_upload(content_type, course_dir, temp_course_dir):
     else:
         raise ValueError('Error: Unsupported content-type')
 
-    # the course already exists in the grader
+    # the course already exists
     if os.path.exists(course_dir):
-        dir_mtime = os.path.getmtime(course_dir) * 1e6
-        # the uploaded directory should be newer than the course directory in the grader
-
-        if index_mtime < dir_mtime:
+        srv_index_mtime = os.path.getmtime(os.path.join(course_dir, 'index.html')) * 1e6
+        # the uploaded files should be a newer version
+        if math.isclose(index_mtime, srv_index_mtime) or index_mtime < srv_index_mtime:
             raise Exception('Error; The uploaded directory is older than the current directory')
 
     # a temp course directory exists,
     # meaning that a uploading process is on the halfway
     if os.path.exists(temp_course_dir):
-        # temp_dir_ctime = os.path.getctime(temp_course_dir) * 1e6
-        # # if the uploaded directory is later than temp course dir
-        # # another uploading process is prior
-        # if index_mtime > temp_dir_ctime:
         raise Exception('Error: Another uploading process is prior')
 
 

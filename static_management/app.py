@@ -63,6 +63,13 @@ def get_files_to_update(course_name):
         logger.info(traceback.format_exc())
         return BadRequest(error_print())
 
+    # check whether the index html exists in the client side
+    index_key = os.path.join(course_name, 'index.html')
+    if index_key not in manifest_client:
+        logger.info("The index html file is not found in the newly built course!")
+        return BadRequest("The index html file is not found in the newly built course!")
+
+    # if the course has not been uploaded yet, upload all the files
     if not os.path.exists(course_directory) or not os.path.isdir(course_directory):
         files_to_update = {'files_new': manifest_client,
                            'files_update': {},
@@ -75,22 +82,20 @@ def get_files_to_update(course_name):
         data['exist'] = False
         return jsonify(**data), 200
 
+    # else if the course already exists
     data['exist'] = True
-
-    # check whether the index html exists in the client side
-    index_key = os.path.join(course_name, 'index.html')
-    if index_key not in manifest_client:
-        logger.info("The index html file is not found in the newly built course!")
-        return BadRequest("The index html file is not found in the newly built course!")
 
     with open(os.path.join(static_file_path, 'manifest.json'), 'r') as manifest_srv_file:
         manifest_srv = json.load(manifest_srv_file)
 
+    # check whether the files from the client side is a newer version
     if (math.isclose(manifest_client[index_key]['mtime'], manifest_srv[index_key]['mtime'])
        or manifest_client[index_key]['mtime'] < manifest_srv[index_key]['mtime']):
         logger.info("The built version is older than the version in the server")
         return BadRequest("The built version is older than the version in the server")
 
+    # compare the files between the client side and the server side
+    # get list of files to upload / update
     course_manifest_srv = {f: manifest_srv[f] for f in manifest_srv if f.split(os.sep)[0] == course_name}
     files_to_update = files_to_update_1(manifest_client, course_manifest_srv)
     data['files_new'], data['files_update'] = files_to_update['files_new'], files_to_update['files_update']
@@ -120,6 +125,8 @@ def static_upload(course_name):
     content_type = request.content_type
 
     temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name)
+
+    whether_can_upload(content_type, course_directory, temp_course_dir)
 
     # upload/ update the courses files of a course
     try:
