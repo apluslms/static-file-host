@@ -10,9 +10,11 @@ services:
       - APP_NAME=static_management
     expose:
       - 9000
+    ports:
+      - "127.0.0.1:9000:9001"
   nginx:
     build: ./nginx
     container_name: nginx
     restart: always
     ports:
-      - "80:80"
+      - "127.0.0.1:80:80"
