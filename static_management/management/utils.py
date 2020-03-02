@@ -39,65 +39,11 @@ def files_to_update_1(manifest_client, manifest_srv):
 
     files_inter = list(client_files.intersection(srv_files))
     files_update = {f: manifest_client[f] for f in files_inter
-                    if not math.isclose(manifest_client[f]["mtime"], manifest_srv[f]["mtime"])}
-
-    # print("The number of intersection of files: ", len(files_inter))
-    # print("The number of updated files: ", len(files_update))
-    # files_inter_dict = dict()
-    # for f in files_inter:
-    #     files_inter_dict[f] = {"client": manifest_client[f]["mtime"],
-    #                            "server": manifest_srv[f]["mtime"]}
-    # files_update_dict = dict()
-    # for f in list(files_update.keys()):
-    #     files_update_dict[f] = {"client": manifest_client[f]["mtime"],
-    #                             "server": manifest_srv[f]["mtime"]}
-    #
-    # print("Intersection of files")
-    # pp.pprint(files_inter_dict)
-    # print("Files to update")
-    # pp.pprint(files_update_dict)
+                    if manifest_client[f]["mtime"] > manifest_srv[f]["mtime"]}
 
     files_to_update = {'files_new': files_new, 'files_update': files_update, 'files_remove': files_remove}
 
     return files_to_update
-
-
-def files_to_update_2(manifest_client, manifest_srv):
-    # files = sorted([f for f in manifest_client if f not in manifest_srv or
-    #                manifest_client[f]["mtime"] > manifest_srv[f]["mtime"]])
-    # files = sorted([f for f in manifest_client if f not in manifest_srv or
-    #                 (not math.isclose(manifest_client[f]["mtime"], manifest_srv[f]["mtime"])
-    #                  and manifest_client[f]["mtime"] > manifest_srv[f]["mtime"])])
-    files = sorted([f for f in manifest_client if f not in manifest_srv or
-                    not math.isclose(manifest_client[f]["mtime"], manifest_srv[f]["mtime"])])
-
-    if len(files) == len(manifest_client) and files:
-        return '.'
-
-    filtered = set()
-
-    # go through folders one 'level' at a time, if everything in a folder
-    # is going to be copied, we'll just copy the folder instead of files individually
-    subfolder_level = 1
-    while files:
-        filtered = filtered.union({f for f in files if f.count(os.sep) < subfolder_level})  # files in this level
-        files = [f for f in files if f.count(os.sep) >= subfolder_level]  # files in the subdirs of this level
-        folders = {os.path.dirname(f) for f in files if f.count(os.sep) == subfolder_level}  # subdirs in this level
-        for folder in folders:
-            update_whole_folder = (
-                    len([f for f in files if folder in f]) ==
-                    len([f for f in manifest_client if folder in f]))
-            if update_whole_folder:
-                files = [f for f in files if folder not in f]
-                filtered.add(folder)
-            else:
-                files_in_folder = {f for f in files
-                                   if folder in f and f.count(os.sep) == subfolder_level}
-                files = [f for f in files if f not in files_in_folder]
-                filtered = filtered.union(files_in_folder)
-        subfolder_level += 1
-
-    return list(filtered)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Upload handlers
@@ -111,13 +57,13 @@ def whether_can_upload(content_type, course_dir, temp_course_dir):
     # (the building time of the course to upload)
     if content_type == 'application/octet-stream':
         try:
-            index_mtime = float(request.headers['Index-Mtime'])
+            client_index_mtime = float(request.headers['Index-Mtime'])
         except:
             logger.info(traceback.format_exc())
             raise
     elif content_type.startswith('multipart/form-data'):
         try:
-            index_mtime = float(request.form['index_mtime'])
+            client_index_mtime = float(request.form['index_mtime'])
         except:
             logger.info(traceback.format_exc())
             raise
@@ -126,9 +72,9 @@ def whether_can_upload(content_type, course_dir, temp_course_dir):
 
     # the course already exists
     if os.path.exists(course_dir):
-        srv_index_mtime = os.path.getmtime(os.path.join(course_dir, 'index.html')) * 1e6
+        srv_index_mtime = os.stat(os.path.join(course_dir, 'index.html')).st_mtime_ns
         # the uploaded files should be a newer version
-        if math.isclose(index_mtime, srv_index_mtime) or index_mtime < srv_index_mtime:
+        if client_index_mtime < srv_index_mtime:
             raise Exception('Error; The uploaded directory is older than the current directory')
 
     # a temp course directory exists,
