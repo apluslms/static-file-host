@@ -1,6 +1,6 @@
 import os
 import sys
-import hashlib
+from hashlib import sha256
 import logging
 
 
@@ -13,9 +13,8 @@ def _sig(file):
     #         st.st_size,
     #         st.st_mtime)
     st = os.stat(file)
-    return {"mtime": st.st_mtime * 1e6,
-            # "size":  st.st_size,
-            "checksum": hashlib.md5(open(file, 'rb').read()).hexdigest()}
+    return {"mtime": st.st_mtime_ns,
+            "checksum": 'sha256:' + sha256(open(file, 'rb').read()).hexdigest()}
 
 
 def get_file_manifest(directory, course_name):
@@ -25,16 +24,14 @@ def get_file_manifest(directory, course_name):
     :param course_name: str, the course name of the files
     :return: a nested dict with rel_file_name as the key and the value is a dict holding the file mtime and the size
     """
-    # IGNORE = set(['.git', '.idea', '__pycache__'])
+    # IGNORE = set(['.git', '.idea', '__pycache__'])  # or NONIGNORE if the dir/file starting with '.' is ignored
 
     manifest = dict()
 
     for basedir, dirs, files in os.walk(directory):
-        # dirs[:] = [d for d in dirs if d not in IGNORE]
         dirs[:] = [d for d in dirs if not d.startswith('.')]
+        files = [f for f in files if not f.startswith('.')]
         for filename in files:
-            # if filename.startswith("."):
-            #     continue
             file = os.path.join(basedir, filename)
             # file_manifest = {"ctime": os.path.getctime(file),
             #                  "size":  os.path.getsize(file)}
@@ -62,7 +59,7 @@ def check_static_directory(directory):
     elif not os.path.exists(index_html):
         raise FileNotFoundError("No '_build/html/index.yaml' file")
 
-    index_mtime = os.path.getmtime(index_html) * 1e6
+    index_mtime = _sig(index_html)["mtime"]
 
     return static_dir, index_html, index_mtime
 
