@@ -5,12 +5,13 @@ from io import BytesIO
 import json
 import pprint
 import logging
+import traceback
 
 from upload import upload_files
 from utils import (get_file_manifest,
                    check_static_directory,
                    examine_env_var,
-                   error_print,
+                   GetFileUpdateError,
                    )
 
 logger = logging.getLogger(__name__)
@@ -22,40 +23,38 @@ def main():
     examine_env_var()
 
     static_dir, index_html, index_mtime = check_static_directory(os.getcwd())
-    manifest_client = get_file_manifest(static_dir, os.environ['PLUGIN_COURSE'])
-    # print("manifests in the client side:")
-    # pp.pprint(manifest_client)
+    manifest_client = get_file_manifest(static_dir)
 
-    get_files_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/get_files_to_update'
-
-    # Create the in-memory file-like object
+    # Create the in-memory file-like object storing the manifest
     buffer = BytesIO()
     buffer.write(json.dumps(manifest_client).encode('utf-8'))
     buffer.seek(0)
-    # json.dump(manifest_client, buffer)
+
+    get_files_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/get-files-to-update'
+    upload_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/upload-file'
+    finalizer_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/upload-finalizer'
     headers = {
         'Authorization': 'Bearer {}'.format(os.environ['PLUGIN_TOKEN'])
     }
 
-    # get the manifest of files in the server side
+    # 1. get the manifest of files in the server side
     try:
         get_files_r = requests.post(get_files_url, headers=headers,
                                     files={"manifest_client": buffer.getvalue()})
-    except requests.exceptions.RequestException as e:
-        raise e
-
-    if get_files_r.status_code != 200:
-        logger.error(get_files_r.text)
+        if get_files_r.status_code != 200:
+            raise GetFileUpdateError(get_files_r.text)
+    except:
+        logger.error(traceback.format_exc())
         sys.exit(1)
 
-    upload_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/upload'
+    process_id = get_files_r.json().get("id")
 
     try:
-        # json_data = json.loads(get_files_r.text)
+        # 2. upload files
+        # get the file list to upload
         if not get_files_r.json().get("exist"):
             print("The course {} will be newly added".format(os.environ['PLUGIN_COURSE']))
             files_upload = [(static_dir, os.path.getsize(static_dir))]
-            upload_files(files_upload, static_dir, upload_url, index_mtime)
         else:
             print("The course {} already exists, will be updated".format(os.environ['PLUGIN_COURSE']))
             files_new = get_files_r.json().get("files_new")
@@ -64,15 +63,25 @@ def main():
             files_upload_dict = {**files_new, **files_update}
             files_upload = list()
             for f in list(files_upload_dict.keys()):
-                full_path = os.path.join(static_dir, f.replace(os.environ['PLUGIN_COURSE']+os.sep, ''))
+                full_path = os.path.join(static_dir, f)
                 file_size = os.path.getsize(full_path)
                 files_upload.append((full_path, file_size))
 
-            upload_files(files_upload, static_dir, upload_url, index_mtime)
+        # send request
+        data = {"index_mtime": index_mtime, "id": process_id}
+        upload_files(files_upload, static_dir, upload_url, data)
+
+        # 3. finalize the uploading process
+        data = {"upload": "success", "id": process_id}
+        finalizer_r = requests.get(finalizer_url, headers=headers, data=data)
+        logger.info(finalizer_r.text)
     except:
         # Send a signal to the server that the process is aborted
-        # and the temp json file of the manifest should be removed?
-        logger.error(error_print())
+        logger.error(traceback.format_exc())
+        data = {"upload": "fail", "id": process_id}
+        finalizer_r = requests.get(finalizer_url, headers=headers, data=data)
+        logger.info(finalizer_r.text)
+
         sys.exit(1)
 
 

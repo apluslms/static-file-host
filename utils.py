@@ -17,11 +17,10 @@ def _sig(file):
             "checksum": 'sha256:' + sha256(open(file, 'rb').read()).hexdigest()}
 
 
-def get_file_manifest(directory, course_name):
+def get_file_manifest(directory):
     """
     get manifest of files
     :param directory: str, the path of the directory
-    :param course_name: str, the course name of the files
     :return: a nested dict with rel_file_name as the key and the value is a dict holding the file mtime and the size
     """
     # IGNORE = set(['.git', '.idea', '__pycache__'])  # or NONIGNORE if the dir/file starting with '.' is ignored
@@ -33,10 +32,8 @@ def get_file_manifest(directory, course_name):
         files = [f for f in files if not f.startswith('.')]
         for filename in files:
             file = os.path.join(basedir, filename)
-            # file_manifest = {"ctime": os.path.getctime(file),
-            #                  "size":  os.path.getsize(file)}
             file_manifest = _sig(file)
-            file_name = os.path.join(course_name, os.path.relpath(file, start=directory))
+            file_name = os.path.relpath(file, start=directory)
             manifest[file_name] = file_manifest
 
     return manifest
@@ -80,6 +77,10 @@ def examine_env_var():
     else:
         missing = [var for var in required if var not in os.environ]
         raise EnvVarNotFoundError(missing)
+
+
+class GetFileUpdateError(Exception):
+    pass
 
 
 class UploadError(Exception):
