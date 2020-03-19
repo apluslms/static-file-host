@@ -7,7 +7,7 @@ import pprint
 import logging
 import traceback
 
-from upload import upload_files
+from upload import upload_to_server
 from utils import (get_file_manifest,
                    check_static_directory,
                    examine_env_var,
@@ -17,12 +17,17 @@ from utils import (get_file_manifest,
 logger = logging.getLogger(__name__)
 pp = pprint.PrettyPrinter(indent=4)
 
+# os.environ['PLUGIN_API'] = 'http://0.0.0.0:5000/'
+# os.environ['PLUGIN_TOKEN'] = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJkZWZfY291cnNlIiwiaWF0IjoxNTYyODI4MzA0LCJpc3MiOiJzaGVwaGVyZCJ9.MUkoD27P6qZKKMM5juL0e0pZl8OVH6S17N_ZFzC7D0cwOgbcDaAO3S1BauXzhQOneChPs1KEzUxI2dVF-Od_gpN8_IJEnQnk25XmZYecfdoJ5ST-6YonVmUMzKP7UAcvzCFye7mkX7zJ1ADYtda57IUdyaLSPOWnFBSHX5B4XTzzPdVZu1xkRtb17nhA20SUg9gwCOPD6uLU4ml1aOPHBdiMLKz66inI8txPrRK57Gn33m8lVp0WTOOgLV5MkCIpkgVHBl50EHcQFA5KfPet3FBLjpp2I1yThQe_n1Zc6GdnR0v_nqX0JhmmDMOvJ5rhIHZ7B0hEtFy9rKUWOWfcug'
+# os.environ['PLUGIN_COURSE'] = 'def_course'
+# course_dir = '/u/71/qinq1/unix/Desktop/my_new_course'
+
 
 def main():
 
     examine_env_var()
-
-    static_dir, index_html, index_mtime = check_static_directory(os.getcwd())
+    course_dir = os.getcwd()
+    static_dir, index_html, index_mtime = check_static_directory(course_dir)
     manifest_client = get_file_manifest(static_dir)
 
     # Create the in-memory file-like object storing the manifest
@@ -69,18 +74,24 @@ def main():
 
         # send request
         data = {"index_mtime": index_mtime, "id": process_id}
-        upload_files(files_upload, static_dir, upload_url, data)
+        upload_to_server(files_upload, static_dir, upload_url, data)
 
         # 3. finalize the uploading process
-        data = {"upload": "success", "id": process_id}
-        finalizer_r = requests.get(finalizer_url, headers=headers, data=data)
-        logger.info(finalizer_r.text)
+        data = {"index_mtime": index_mtime,
+                "upload": "success",
+                "id": process_id}
+        headers["Content-Type"] = "application/json"
+        finalizer_r = requests.get(finalizer_url, headers=headers, json=data)
+        print(finalizer_r.text)
     except:
         # Send a signal to the server that the process is aborted
         logger.error(traceback.format_exc())
-        data = {"upload": "fail", "id": process_id}
-        finalizer_r = requests.get(finalizer_url, headers=headers, data=data)
-        logger.info(finalizer_r.text)
+        data = {"index_mtime": index_mtime,
+                "upload": "fail",
+                "id": process_id}
+        headers["Content-Type"] = "application/json"
+        finalizer_r = requests.get(finalizer_url, headers=headers, json=data)
+        print(finalizer_r.text)
 
         sys.exit(1)
 

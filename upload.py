@@ -116,7 +116,32 @@ def compress_files_upload(file_list, last_file, basedir, buff_size_threshold, up
             compress_files_upload(l, last_file, basedir, buff_size_threshold, upload_url, headers, data)
 
 
-def upload_files(files_and_sizes, basedir, upload_url, data):
+def upload_buffer_by_chunk(buffer, whether_last_file, upload_url, headers, data, file_index):
+    chunk_size = 1024 * 1024 * 4
+    index = 0
+    for chunk, last_chunk in iter_read_chunks(buffer, chunk_size=chunk_size):
+        offset = index + len(chunk)
+        headers['Content-Type'] = 'application/octet-stream'
+        headers['ID'] = data['id']
+        headers['Chunk-Size'] = str(chunk_size)
+        headers['Chunk-Index'] = str(index)
+        headers['Chunk-Offset'] = str(offset)
+        headers['File-Index'] = str(file_index)
+        headers['Index-Mtime'] = str(data["index_mtime"])
+        if last_chunk:
+            headers['Last-Chunk'] = 'True'
+        if whether_last_file:
+            headers['Last-File'] = 'True'
+        index = offset
+        try:
+            res = requests.post(upload_url, headers=headers, data=chunk)
+        except:
+            raise
+        if res.status_code != 200:
+            raise UploadError(res.text)
+
+
+def upload_to_server(files_and_sizes, basedir, upload_url, data):
     """ 1. the files bigger than 50MB are compressed one by one,
         and the smaller files are collected to fill a quota (50MB) and then compressed
         2. the compression file smaller than 4MB is posted directly, otherwise posted by chunks
@@ -168,27 +193,7 @@ def upload_files(files_and_sizes, basedir, upload_url, data):
                     raise UploadError(res.text)
 
             else:   # Upload the compressed file by chunks
-                chunk_size = 1024 * 1024 * 4
-                index = 0
-                for chunk, last_chunk in iter_read_chunks(buffer, chunk_size=chunk_size):
-                    offset = index + len(chunk)
-                    headers['Content-Type'] = 'application/octet-stream'
-                    headers['ID'] = data['id']
-                    headers['Chunk-Size'] = str(chunk_size)
-                    headers['Chunk-Index'] = str(index)
-                    headers['Chunk-Offset'] = str(offset)
-                    headers['File-Index'] = str(file_index)
-                    if last_chunk:
-                        headers['Last-Chunk'] = 'True'
-                    if last_file:
-                        headers['Last-File'] = 'True'
-                    index = offset
-                    try:
-                        res = requests.post(upload_url, headers=headers, data=chunk)
-                    except:
-                        raise
-                    if res.status_code != 200:
-                        raise UploadError(res.text)
+                upload_buffer_by_chunk(buffer, last_file, upload_url, init_headers, data, file_index)
 
             buffer.close()
 
