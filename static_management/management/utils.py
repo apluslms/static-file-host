@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Get list of the files to update
 
 
-def get_files_to_update(manifest_client, manifest_srv):
+def compare_files_to_update(manifest_client, manifest_srv):
     """
     :param manifest_client: a nested dict dict[file] = {'size': , 'mtime': } in the client-side (a specific course)
     :param manifest_srv: a nested dict dict[file] = {'size': , 'mtime': } in the server side
@@ -73,7 +73,7 @@ def whether_can_upload(content_type, course_dir):
     if os.path.exists(course_dir):
         srv_index_mtime = os.stat(os.path.join(course_dir, 'index.html')).st_mtime_ns
         # the uploaded files should be a newer version
-        if client_index_mtime < srv_index_mtime:
+        if client_index_mtime <= srv_index_mtime:
             raise PermissionError('Could not upload: Not newer than the current version in the server')
 
 

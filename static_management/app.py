@@ -15,7 +15,7 @@ from werkzeug.exceptions import BadRequest
 from management import create_app, config
 from management.auth import prepare_decoder, authenticate
 from management.utils import (
-    get_files_to_update,
+    compare_files_to_update,
     whether_can_upload,
     upload_octet_stream,
     upload_form_data,
@@ -80,20 +80,20 @@ def get_files_to_update(course_name):
                            'files_remove': {}}
     # else if the course already exists
     else:
+        with open(os.path.join(static_file_path, course_name, 'manifest.json'), 'r') as manifest_srv_file:
+            manifest_srv = json.load(manifest_srv_file)
         # check whether the index mtime is earlier than the one in the server
-        srv_index_mtime = os.stat(os.path.join(course_dir, 'index.html')).st_mtime_ns
-        if manifest_client[index_key] < srv_index_mtime:
+        # srv_index_mtime = os.stat(os.path.join(course_dir, 'index.html')).st_mtime_ns
+        # print(manifest_client[index_key]['mtime'], manifest_srv[index_key]['mtime'], srv_index_mtime)
+        if manifest_client[index_key]['mtime'] <= manifest_srv[index_key]['mtime']:
             return BadRequest('Abort: the client version is older than server version')
 
         data['exist'] = True
 
-        with open(os.path.join(static_file_path, course_name, 'manifest.json'), 'r') as manifest_srv_file:
-            manifest_srv = json.load(manifest_srv_file)
-
         # compare the files between the client side and the server side
         # get list of files to upload / update
         course_manifest_srv = {f: manifest_srv[f] for f in manifest_srv if f.split(os.sep)[0] == course_name}
-        files_to_update = get_files_to_update(manifest_client, course_manifest_srv)
+        files_to_update = compare_files_to_update(manifest_client, course_manifest_srv)
 
     # get a unique id for this uploading process
     unique_id = str(uuid4())
@@ -123,13 +123,13 @@ def upload_file(course_name):
     if not static_file_path:
         return ImproperlyConfigured('STATIC_FILE_PATH not configured')
 
-    course_directory = os.path.join(static_file_path, course_name)
+    # course_directory = os.path.join(static_file_path, course_name)
 
     status = None  # The status in response
     # check request content-type
     content_type = request.content_type
 
-    whether_can_upload(content_type, course_directory)
+    # whether_can_upload(content_type, course_directory)
 
     # upload/ update the courses files of a course
     try:
@@ -149,12 +149,14 @@ def upload_file(course_name):
 
             data, file = request.form, request.files['file']
             temp_dir_id = data['id']
-            temp_course_dir = os.path.join(static_file_path, 'temp' + course_name + '_' + temp_dir_id)
+            temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name + '_' + temp_dir_id)
             upload_form_data(file, temp_course_dir)
             if data.get('last_file') is True or data.get('last_file') == 'True':
                 status = "finish"
             else:
                 status = "success"
+        else:
+            raise ValueError('Upload-File Error: Unsupported content-type')
     except:
         return BadRequest(error_print())
 
@@ -168,7 +170,6 @@ def upload_file(course_name):
 def upload_finalizer(course_name):
 
     auth = authenticate(jwt_decode)
-
     process_id = request.get_json().get("id")
     if process_id is None:
         return BadRequest("Invalid finalizer of the uploading process")
@@ -181,6 +182,7 @@ def upload_finalizer(course_name):
     temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name + '_' + process_id)
     finalizer_msg = ""
 
+    # if the process failed, remove the temp dir
     if request.get_json().get("upload") != "success":
         if os.path.exists(temp_course_dir):
             shutil.rmtree(temp_course_dir)
@@ -203,20 +205,26 @@ def upload_finalizer(course_name):
         os.rename(temp_course_dir, course_dir)
         with open(manifest_file, 'w') as f:
             json.dump(files_new, f)
-        os.remove(os.path.join(temp_course_dir, 'files_to_update.json'))
+        os.remove(os.path.join(course_dir, 'files_to_update.json'))
     else:
-        index_key = "index.yaml"
+        index_key = "index.html"
+        lock_f = open(os.path.join(course_dir, 'dir.lock'), 'w+')
+
         while True:
+            print(lock_f.fileno())
             try:
-                lock_f = open(os.path.join(course_dir, 'dir.lock'), 'w+')
+                # lock_f = os.path.join(course_dir, 'dir.lock')
+                # if os.path.exists(lock_f):
+                #     raise IOError('another uploading is on the way')
                 fcntl.flock(lock_f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                # fd = open(lock_f, 'w+')
                 files_upload = {**files_new, **files_update}
                 with open(manifest_file, 'r') as f:
                     manifest_srv = json.load(f)
 
-                if float(request.get_json().get("index_mtime")) < manifest_srv[index_key]:
-                    fcntl.flock(lock_f, fcntl.LOCK_UN)
-                    lock_f.close()
+                if request.get_json().get("index_mtime") <= manifest_srv[index_key]['mtime']:
+                    # fcntl.flock(lock_f, fcntl.LOCK_UN)
+                    # lock_f.close()
                     raise PermissionError('Abort: the client version is older than server version')
 
                 os.remove(os.path.join(temp_course_dir, 'files_to_update.json'))
@@ -237,15 +245,20 @@ def upload_finalizer(course_name):
                     os.remove(os.path.join(course_dir, f))
                     del manifest_srv[f]
 
-                fcntl.flock(lock_f, fcntl.LOCK_UN)
-                lock_f.close()
                 with open(manifest_file, 'w') as f:
                     json.dump(manifest_srv, f)
+                fcntl.flock(lock_f.fileno(), fcntl.LOCK_UN)
+                lock_f.close()
+                # fd.close()
+                # os.remove(lock_f)
+                print("success")
                 break
             except IOError:
-                time.sleep(10)
+                print('another uploading is on the way')
+                time.sleep(5)
             # if another error raises
             except:
+                logger.debug(traceback.format_exc())
                 shutil.rmtree(temp_course_dir)
                 return BadRequest(traceback.format_exc())
 
