@@ -36,11 +36,15 @@ def compare_files_to_update(manifest_client, manifest_srv):
     files_remove = list(srv_files - client_files)
     files_new = {f: manifest_client[f] for f in list(client_files - srv_files)}
 
-    files_inter = list(client_files.intersection(srv_files))
+    files_inter = client_files.intersection(srv_files)
     files_replace = {f: manifest_client[f] for f in files_inter
                      if manifest_client[f]["mtime"] > manifest_srv[f]["mtime"]}
+    files_keep = list(files_inter - set(files_replace.keys()))
 
-    files_to_update = {'files_new': files_new, 'files_update': files_replace, 'files_remove': files_remove}
+    files_to_update = {'files_new': files_new,
+                       'files_update': files_replace,
+                       'files_keep': files_keep,
+                       'files_remove': files_remove}
 
     return files_to_update
 

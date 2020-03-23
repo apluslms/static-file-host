@@ -5,8 +5,8 @@ import pprint
 import logging
 import traceback
 from uuid import uuid4
-import fcntl
 import time
+from filelock import Timeout, FileLock
 
 from flask import request, jsonify
 from werkzeug.exceptions import BadRequest
@@ -77,6 +77,7 @@ def get_files_to_update(course_name):
         data['exist'] = False
         files_to_update = {'files_new': manifest_client,
                            'files_update': {},
+                           'files_keep': {},
                            'files_remove': {}}
     # else if the course already exists
     else:
@@ -198,68 +199,61 @@ def upload_finalizer(course_name):
     with open(os.path.join(temp_course_dir, 'files_to_update.json'), 'r') as f:
         files_to_update = json.loads(f.read())
 
-    files_new, files_update, files_remove = (files_to_update['files_new'],
-                                             files_to_update['files_update'],
-                                             files_to_update['files_remove'])
-    if not os.path.exists(course_dir) and not files_update and not files_remove:
+    files_new, files_update, files_keep, files_remove = (files_to_update['files_new'],
+                                                         files_to_update['files_update'],
+                                                         files_to_update['files_keep'],
+                                                         files_to_update['files_remove'])
+    if not os.path.exists(course_dir) and(
+            not files_update and
+            not files_keep and
+            not files_remove):
         os.rename(temp_course_dir, course_dir)
         with open(manifest_file, 'w') as f:
             json.dump(files_new, f)
         os.remove(os.path.join(course_dir, 'files_to_update.json'))
     else:
         index_key = "index.html"
-        lock_f = open(os.path.join(course_dir, 'dir.lock'), 'w+')
-
+        lock_f = os.path.join(static_file_path, course_name+'.lock')
+        lock = FileLock(lock_f)
         while True:
-            print(lock_f.fileno())
             try:
-                # lock_f = os.path.join(course_dir, 'dir.lock')
-                # if os.path.exists(lock_f):
-                #     raise IOError('another uploading is on the way')
-                fcntl.flock(lock_f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                # fd = open(lock_f, 'w+')
-                files_upload = {**files_new, **files_update}
-                with open(manifest_file, 'r') as f:
-                    manifest_srv = json.load(f)
+                with lock.acquire(timeout=1):
+                    with open(manifest_file, 'r') as f:
+                        manifest_srv = json.load(f)
 
                 if request.get_json().get("index_mtime") <= manifest_srv[index_key]['mtime']:
-                    # fcntl.flock(lock_f, fcntl.LOCK_UN)
-                    # lock_f.close()
                     raise PermissionError('Abort: the client version is older than server version')
 
-                os.remove(os.path.join(temp_course_dir, 'files_to_update.json'))
-                for basedir, dirs, files in os.walk(temp_course_dir):
-                    for filename in files:
-                        old_file_path = os.path.join(basedir, filename)
-                        rel_file_path = os.path.relpath(old_file_path, start=temp_course_dir)
-                        new_file_path = os.path.join(course_dir, rel_file_path)
-                        # print(new_file_path, "old:", ctime(os.path.getmtime(new_file_path)))
-                        file_move_safe(old_file_path, new_file_path)
-                        # Update the manifest json file
-                        manifest_srv[rel_file_path] = files_upload[rel_file_path]
+                for f in files_keep:
+                    os.link(os.path.join(course_dir, f), os.path.join(temp_course_dir, f))
 
-                shutil.rmtree(temp_course_dir)
-                # Remove old files
+                # add/update manifest
+                files_upload = {**files_new, **files_update}
+                for f in files_upload:
+                    manifest_srv[f] = files_upload[f]
+                # remove old files
                 for f in files_remove:
                     # os.remove(os.path.join(course_dir, f.replace(course_name + os.sep, '')))
                     os.remove(os.path.join(course_dir, f))
                     del manifest_srv[f]
 
-                with open(manifest_file, 'w') as f:
+                with open(os.path.join(temp_course_dir, 'manifest.json'), 'w') as f:
                     json.dump(manifest_srv, f)
-                fcntl.flock(lock_f.fileno(), fcntl.LOCK_UN)
-                lock_f.close()
-                # fd.close()
-                # os.remove(lock_f)
-                print("success")
+
+                os.rename(course_dir, course_dir+'_old')
+                os.rename(temp_course_dir, course_dir)
+                os.remove(os.path.join(course_dir, 'files_to_update.json'))
+                shutil.rmtree(course_dir+'_old')
+                os.remove(lock_f)
                 break
-            except IOError:
-                print('another uploading is on the way')
+            except Timeout:
+                print('another process is running')
                 time.sleep(5)
             # if another error raises
             except:
                 logger.debug(traceback.format_exc())
                 shutil.rmtree(temp_course_dir)
+                os.remove(lock_f)
                 return BadRequest(traceback.format_exc())
 
     return jsonify({
