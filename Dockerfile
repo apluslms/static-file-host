@@ -1,6 +1,6 @@
 FROM apluslms/service-base:python3-1.5
 
-ARG UPLOAD_FILE=$1
+ARG UPLOAD_FILE
 
 ENV TZ=Europe/Helsinki
 ENV UPLOAD_FILE=${UPLOAD_FILE}
