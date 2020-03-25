@@ -3,7 +3,11 @@ version: "3"
 services:
 
   static_management:
-    build: ./static_management
+    build:
+      context: ./static_management
+      dockerfile: Dockerfile
+      args:
+          SERVER_FILE: html
     container_name: static_management
     restart: always
     environment:

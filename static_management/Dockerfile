@@ -1,5 +1,8 @@
 FROM apluslms/service-base:python3-1.5
 
+ARG SERVER_FILE
+
+ENV FILE_TYPE=${SERVER_FILE}
 ENV DEBIAN_FRONTEND noninteractive
 ENV SERVER_PATH /srv/static_management
 ENV TZ=Europe/Helsinki
