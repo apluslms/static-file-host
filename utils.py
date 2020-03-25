@@ -39,26 +39,27 @@ def get_file_manifest(directory):
     return manifest
 
 
-def check_static_directory(directory):
+def check_directory(directory, upload_file):
     """ Check whether the static directory and the index.html file exist
     :param directory: str, the path of a static directory
+    :param upload_file: str, the file type to upload ('html', 'yaml')
     :return: the path of the static directory, the path of the index.html file
              and the modification time of the index.html
     """
 
     # The path of the subdirectory that contains static files
-    static_dir = os.path.join(directory, '_build', 'html')
-    index_html = os.path.join(static_dir, 'index.html')
-    if not os.path.exists(static_dir):
-        raise FileNotFoundError("No '_build/html' directory")
-    elif not os.path.isdir(static_dir):
-        raise NotADirectoryError("'_build/html' is not a directory")
-    elif not os.path.exists(index_html):
-        raise FileNotFoundError("No '_build/html/index.yaml' file")
+    target_dir = os.path.join(directory, '_build', upload_file)
+    index_file = os.path.join(target_dir, 'index.' + upload_file)
+    if not os.path.exists(target_dir):
+        raise FileNotFoundError("_build/{} directory not found".format(upload_file))
+    elif not os.path.isdir(target_dir):
+        raise NotADirectoryError("'_build/{}' is not a directory".format(upload_file))
+    elif not os.path.exists(index_file):
+        raise FileNotFoundError("index.{} not found".format(upload_file))
 
-    index_mtime = _sig(index_html)["mtime"]
+    index_mtime = _sig(index_file)["mtime"]
 
-    return static_dir, index_html, index_mtime
+    return target_dir, index_file, index_mtime
 
 
 class EnvVarNotFoundError(Exception):
@@ -70,7 +71,7 @@ class EnvVarNotFoundError(Exception):
 
 
 def examine_env_var():
-    required = {'PLUGIN_API', 'PLUGIN_TOKEN', 'PLUGIN_COURSE'}
+    required = {'PLUGIN_API', 'PLUGIN_TOKEN', 'PLUGIN_COURSE', 'ACTION'}
 
     if required <= os.environ.keys():
         pass
@@ -84,6 +85,10 @@ class GetFileUpdateError(Exception):
 
 
 class UploadError(Exception):
+    pass
+
+
+class PublishError(Exception):
     pass
 
 

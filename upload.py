@@ -122,7 +122,7 @@ def upload_buffer_by_chunk(buffer, whether_last_file, upload_url, headers, data,
     for chunk, last_chunk in iter_read_chunks(buffer, chunk_size=chunk_size):
         offset = index + len(chunk)
         headers['Content-Type'] = 'application/octet-stream'
-        headers['ID'] = data['id']
+        headers['Process-ID'] = data['process_id']
         headers['Chunk-Size'] = str(chunk_size)
         headers['Chunk-Index'] = str(index)
         headers['Chunk-Offset'] = str(offset)
