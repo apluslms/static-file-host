@@ -1,0 +1,12 @@
+env/
+
+Dockerfile
+.dockerignore
+.gitignore
+
+**/__pycache__/
+
+courses/*
+!courses/.keep
+
+run.sh

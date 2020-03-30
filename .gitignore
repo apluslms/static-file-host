@@ -1,0 +1,8 @@
+static_management/env/
+
+**/__pycache__/
+**/.idea/
+*.pyc
+
+static_management/courses/*
+!static_management/courses/.keep
