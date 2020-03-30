@@ -1,0 +1,15 @@
+env/
+.github/
+.pytest_cache/
+**/__pycache__/
+**/.idea/
+**/.vscode/
+
+**/*.pyc
+
+Dockerfile
+.dockerignore
+.gitignore
+
+run.sh
+build.sh

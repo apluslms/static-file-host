@@ -1,8 +1,11 @@
-static_management/env/
+server/static_management/env/
+client/env/
 
-**/__pycache__/
 **/.idea/
+**/.vscode/
+**/__pycache__/
+**/.pytest_cache/
 *.pyc
 
-static_management/courses/*
-!static_management/courses/.keep
+server/tatic_management/courses/*
+!server/static_management/courses/.keep
