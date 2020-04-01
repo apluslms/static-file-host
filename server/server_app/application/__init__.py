@@ -33,14 +33,6 @@ def create_app(configuration=config.BaseConfig):
 
     cleanup_start()
 
-    # with app.app_context():
-    #     while True:
-    #         time.sleep(CLEANUP_TIME)
-    #         static_path = app.config.get('STATIC_FILE_PATH')
-    #         dirs = next(os.walk(static_path))[1]
-    #         for temp_dir in [d for d in dirs if d.startswith('temp')]:
-    #             shutil.rmtree(os.path.join(static_path, temp_dir))
-
     return app
 
 

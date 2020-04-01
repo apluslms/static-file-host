@@ -7,15 +7,16 @@ import json
 import pprint
 import logging
 import traceback
-#sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'helpers'))
+
 from helpers.upload import upload_to_server
-from helpers.utils import (get_file_manifest,
-                           check_directory,
+from helpers.utils import (get_file_manifest_in_folder,
+                           validate_directory,
                            examine_env_var,
                            GetFileUpdateError,
                            PublishError,
                            error_print,
                            )
+from helpers import COURSE_FOLDER, PROCESS_FILE, FILE_TYPE1
 
 logger = logging.getLogger(__name__)
 pp = pprint.PrettyPrinter(indent=4)
@@ -23,11 +24,7 @@ pp = pprint.PrettyPrinter(indent=4)
 # os.environ['PLUGIN_API'] = 'http://0.0.0.0:5000/'
 # os.environ['PLUGIN_TOKEN'] = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJkZWZfY291cnNlIiwiaWF0IjoxNTYyODI4MzA0LCJpc3MiOiJzaGVwaGVyZCJ9.MUkoD27P6qZKKMM5juL0e0pZl8OVH6S17N_ZFzC7D0cwOgbcDaAO3S1BauXzhQOneChPs1KEzUxI2dVF-Od_gpN8_IJEnQnk25XmZYecfdoJ5ST-6YonVmUMzKP7UAcvzCFye7mkX7zJ1ADYtda57IUdyaLSPOWnFBSHX5B4XTzzPdVZu1xkRtb17nhA20SUg9gwCOPD6uLU4ml1aOPHBdiMLKz66inI8txPrRK57Gn33m8lVp0WTOOgLV5MkCIpkgVHBl50EHcQFA5KfPet3FBLjpp2I1yThQe_n1Zc6GdnR0v_nqX0JhmmDMOvJ5rhIHZ7B0hEtFy9rKUWOWfcug'
 # os.environ['PLUGIN_COURSE'] = 'def_course'
-# os.environ['UPLOAD_FILE'] = 'html'
-# course_dir = '/u/71/qinq1/unix/Desktop/my_new_course'
-
-COURSE_FOLDER = os.getcwd()
-PROCESS_FILE = os.path.join(COURSE_FOLDER, "process_id.json")
+# COURSE_FOLDER = '/u/71/qinq1/unix/Desktop/my_new_course'
 
 
 def main():
@@ -38,15 +35,14 @@ def main():
                         help='upload the selected files to the server')
     action.add_argument('--publish', dest='publish', action='store_true', default=False,
                         help='publish the selected files to the server')
-    parser.add_argument('--file', '-f', dest='file', type=str, required=True,
+    parser.add_argument('--file', '-f', dest='file_type', type=str, required=True,
                         help='The files to select')
 
     try:
         args = parser.parse_args()
         upload = args.upload
         publish = args.publish
-        file = args.file
-        print(args)
+        file_type = args.file_type
     except:
         # parser.print_help()
         logger.debug(error_print)
@@ -56,9 +52,13 @@ def main():
     examine_env_var()
     
     # get the manifest
-    target_dir, index_file, index_mtime = check_directory(COURSE_FOLDER, file)
-    manifest_client = get_file_manifest(target_dir)
-
+    data = validate_directory(COURSE_FOLDER, file_type)
+    if file_type in FILE_TYPE1:
+        target_dir = data['target_dir']
+        manifest_client = get_file_manifest_in_folder(target_dir)
+    else:
+        raise NotImplementedError
+    print(target_dir)
     # Create the in-memory file-like object storing the manifest
     buffer = BytesIO()
     buffer.write(json.dumps(manifest_client).encode('utf-8'))
@@ -77,14 +77,15 @@ def main():
         try:
             get_files_r = requests.post(get_files_url, headers=headers,
                                         files={"manifest_client": buffer.getvalue()})
-            print(get_files_r)
             if get_files_r.status_code != 200:
                 raise GetFileUpdateError(get_files_r.text)
 
             if not get_files_r.json().get("exist"):
+                # upload the whole folder if the course not exist in the server yet
                 print("The course {} will be newly added".format(os.environ['PLUGIN_COURSE']))
                 files_upload = [(target_dir, os.path.getsize(target_dir))]
             else:
+                # else get the files to add/update
                 print("The course {} already exists, will be updated".format(os.environ['PLUGIN_COURSE']))
                 files_new = get_files_r.json().get("files_new")
                 files_update = get_files_r.json().get("files_update")
@@ -106,7 +107,8 @@ def main():
 
         try:
             # 2. upload files
-            data = {"index_mtime": index_mtime, "process_id": process_id}
+            # data = {"index_mtime": index_mtime, "process_id": process_id}
+            data = {"process_id": process_id}
             upload_to_server(files_upload, target_dir, upload_url, data)
         except:
             print(error_print())
@@ -119,9 +121,7 @@ def main():
             # 3. finalize the uploading process
             with open(PROCESS_FILE, 'r') as f:
                 process_id = json.load(f)['process_id']
-            data = {"index_mtime": index_mtime,
-                    # "upload": "success",
-                    "process_id": process_id}
+            data = {"process_id": process_id}
             headers["Content-Type"] = "application/json"
             try:
                 os.remove(PROCESS_FILE)
@@ -130,12 +130,16 @@ def main():
             finalizer_r = requests.get(finalizer_url, headers=headers, json=data)
             if finalizer_r.status_code != 200:
                 raise PublishError(finalizer_r.text)
+            print("The course is published")
         except:
             print(error_print())
             sys.exit(1)
     else:
         print("Invalid action")
-        os.remove(PROCESS_FILE)
+        try:
+            os.remove(PROCESS_FILE)
+        except:
+            pass
         sys.exit(1)
 
 

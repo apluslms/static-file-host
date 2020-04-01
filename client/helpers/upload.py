@@ -127,7 +127,7 @@ def upload_buffer_by_chunk(buffer, whether_last_file, upload_url, headers, data,
         headers['Chunk-Index'] = str(index)
         headers['Chunk-Offset'] = str(offset)
         headers['File-Index'] = str(file_index)
-        headers['Index-Mtime'] = str(data["index_mtime"])
+        # headers['Index-Mtime'] = str(data["index_mtime"])
         if last_chunk:
             headers['Last-Chunk'] = 'True'
         if whether_last_file:

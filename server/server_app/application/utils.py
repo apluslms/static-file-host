@@ -11,16 +11,17 @@ from werkzeug.exceptions import HTTPException
 
 import application.locks as locks
 
+FILE_TYPE1 = ['yaml', 'html']
 
 pp = pprint.PrettyPrinter(indent=4)
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Get list of the files to update
+# File info handler
 
 
 def compare_files_to_update(manifest_client, manifest_srv):
-    """
+    """ Get list of the files to update
     :param manifest_client: a nested dict dict[file] = {'size': , 'mtime': } in the client-side (a specific course)
     :param manifest_srv: a nested dict dict[file] = {'size': , 'mtime': } in the server side
     :return:
@@ -46,37 +47,27 @@ def compare_files_to_update(manifest_client, manifest_srv):
 
     return files_to_update
 
+
+def whether_can_renew(manifest_srv, manifest_client):
+
+    if os.environ.get("SERVER_FILE") in FILE_TYPE1:
+        # check whether the index mtime is earlier than the one in the server
+        index_key = "index.{}".format(os.environ.get("SERVER_FILE"))
+        if manifest_client[index_key]['mtime'] > manifest_srv[index_key]['mtime']:
+            flag = True
+        else:
+            flag = False
+    else:
+        latest_mtime_srv = max(file['mtime'] for file in manifest_srv.values())
+        latest_mtime_client = max(file['mtime'] for file in manifest_client.values())
+        if latest_mtime_client > latest_mtime_srv:
+            flag = True
+        else:
+            flag = False
+
+    return flag
 # ----------------------------------------------------------------------------------------------------------------------
 # Upload handlers
-
-
-# def whether_can_upload(content_type, course_dir):
-#     """ Check that whether the request data can be downloaded
-#     """
-#
-#     # get the modification time of index.yaml file in the client side
-#     # (the building time of the course to upload)
-#     if content_type == 'server_app/octet-stream':
-#         try:
-#             client_index_mtime = float(request.headers['Index-Mtime'])
-#         except:
-#             logger.info(traceback.format_exc())
-#             raise
-#     elif content_type.startswith('multipart/form-data'):
-#         try:
-#             client_index_mtime = float(request.form['index_mtime'])
-#         except:
-#             logger.info(traceback.format_exc())
-#             raise
-#     else:
-#         raise ValueError('Error: Unsupported content-type')
-#
-#     # the course already exists
-#     if os.path.exists(course_dir):
-#         srv_index_mtime = os.stat(os.path.join(course_dir, 'index.html')).st_mtime_ns
-#         # the uploaded files should be a newer version
-#         if client_index_mtime <= srv_index_mtime:
-#             raise PermissionError('Could not upload: Not newer than the current version in the server')
 
 
 def upload_octet_stream(temp_course_dir):

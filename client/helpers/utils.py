@@ -3,6 +3,8 @@ import sys
 from hashlib import sha256
 import logging
 
+from helpers import FILE_TYPE1
+
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,7 @@ def _sig(file):
             "checksum": 'sha256:' + sha256(open(file, 'rb').read()).hexdigest()}
 
 
-def get_file_manifest(directory):
+def get_file_manifest_in_folder(directory):
     """
     get manifest of files
     :param directory: str, the path of the directory
@@ -39,27 +41,29 @@ def get_file_manifest(directory):
     return manifest
 
 
-def check_directory(directory, upload_file):
+def validate_directory(directory, file_type):
     """ Check whether the static directory and the index.html file exist
     :param directory: str, the path of a static directory
-    :param upload_file: str, the file type to upload ('html', 'yaml')
+    :param file_type: str, the file type to upload ('html', 'yaml')
     :return: the path of the static directory, the path of the index.html file
              and the modification time of the index.html
     """
+    if file_type in FILE_TYPE1:
+        # The path of the subdirectory that contains static files
+        target_dir = os.path.join(directory, '_build', file_type)
+        index_file = os.path.join(target_dir, 'index.' + file_type)
+        if not os.path.exists(target_dir):
+            raise FileNotFoundError("_build/{} directory not found".format(file_type))
+        elif not os.path.isdir(target_dir):
+            raise NotADirectoryError("'_build/{}' is not a directory".format(file_type))
+        elif not os.path.exists(index_file):
+            raise FileNotFoundError("index.{} not found".format(file_type))
 
-    # The path of the subdirectory that contains static files
-    target_dir = os.path.join(directory, '_build', upload_file)
-    index_file = os.path.join(target_dir, 'index.' + upload_file)
-    if not os.path.exists(target_dir):
-        raise FileNotFoundError("_build/{} directory not found".format(upload_file))
-    elif not os.path.isdir(target_dir):
-        raise NotADirectoryError("'_build/{}' is not a directory".format(upload_file))
-    elif not os.path.exists(index_file):
-        raise FileNotFoundError("index.{} not found".format(upload_file))
-
-    index_mtime = _sig(index_file)["mtime"]
-
-    return target_dir, index_file, index_mtime
+        return {"target_dir": target_dir}
+    else:
+        # for future possible file types
+        # now raise a ValueError
+        raise ValueError("Unsupported file types")
 
 
 class EnvVarNotFoundError(Exception):

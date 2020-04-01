@@ -15,13 +15,14 @@ from application import create_app, config
 from application.auth import prepare_decoder, authenticate
 from application.utils import (
     compare_files_to_update,
+    whether_can_renew,
     upload_octet_stream,
     upload_form_data,
     error_print,
     ImproperlyConfigured,
     file_move_safe,
 )
-
+# os.environ['SERVER_FILE'] = 'html'
 logger = logging.getLogger(__name__)
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -58,12 +59,6 @@ def get_files_to_update(course_name):
         logger.info(traceback.format_exc())
         return BadRequest(error_print())
 
-    # check whether the index file exists in the client side
-    #index_key = "index.{}".format(os.environ.get('FILE_TYPE'))
-    # if index_key not in manifest_client:
-    #     logger.info("The {} is not found in the newly built course!".format(index_key))
-    #     return BadRequest("The {} is not found in the newly built course!".format(index_key))
-
     course_dir = os.path.join(static_file_path, course_name)
     data = {'course_instance': auth['sub']}  # init the response data
 
@@ -78,15 +73,15 @@ def get_files_to_update(course_name):
     else:
         with open(os.path.join(static_file_path, course_name, 'manifest.json'), 'r') as manifest_srv_file:
             manifest_srv = json.load(manifest_srv_file)
-        # check whether the index mtime is earlier than the one in the server
-        # if manifest_client[index_key]['mtime'] <= manifest_srv[index_key]['mtime']:
-        #     return BadRequest('Abort: the client version is older than server version')
+
+        if not whether_can_renew(manifest_srv, manifest_client):
+            return BadRequest('Abort: the client version is older than server version')
+
         data['exist'] = True  # indicate the course exists in the server
 
         # compare the files between the client side and the server side
         # get list of files to upload / update
-        course_manifest_srv = {f: manifest_srv[f] for f in manifest_srv if f.split(os.sep)[0] == course_name}
-        files_to_update = compare_files_to_update(manifest_client, course_manifest_srv)
+        files_to_update = compare_files_to_update(manifest_client, manifest_srv)
 
     # get a unique id for this uploading process
     process_id = str(uuid4())
@@ -123,7 +118,7 @@ def upload_file(course_name):
         if content_type == 'server_app/octet-stream':
 
             process_id = request.headers['Process-ID']
-            index_mtime = int(request.headers['Index-Mtime'])
+            # index_mtime = int(request.headers['Index-Mtime'])
             temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name + '_' + process_id)
 
             upload_octet_stream(temp_course_dir)
@@ -137,7 +132,6 @@ def upload_file(course_name):
 
             data, file = request.form, request.files['file']
             process_id = data['process_id']
-            index_mtime = int(data['index_mtime'])
             temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name + '_' + process_id)
             upload_form_data(file, temp_course_dir)
             if data.get('last_file') is True or data.get('last_file') == 'True':
@@ -168,7 +162,6 @@ def upload_file(course_name):
         with open(os.path.join(temp_course_dir, 'manifest.json'), 'w') as f:
             json.dump(files_new, f)
     else:
-        # index_key = "index.{}".format(os.environ.get('FILE_TYPE'))
         manifest_file = os.path.join(static_file_path, course_name, 'manifest.json')
         lock_f = os.path.join(static_file_path, course_name + '.lock')
         lock = FileLock(lock_f)
@@ -177,11 +170,10 @@ def upload_file(course_name):
                 with open(manifest_file, 'r') as f:
                     manifest_srv = json.load(f)
 
-            # if index_mtime <= manifest_srv[index_key]['mtime']:
-            #     raise PermissionError('Abort: the client version is older than server version')
-
             for f in files_keep:
-                os.link(os.path.join(course_dir, f), os.path.join(temp_course_dir, f))
+                temp_fp = os.path.join(temp_course_dir, f)
+                os.makedirs(os.path.dirname(temp_fp), exist_ok=True)
+                os.link(os.path.join(course_dir, f), temp_fp)
 
             # add/update manifest
             files_upload = {**files_new, **files_update}
@@ -230,17 +222,19 @@ def upload_finalizer(course_name):
         os.rename(temp_course_dir, course_dir)
     # if the course already exist
     else:
-        manifest_file = os.path.join(static_file_path, course_name, 'manifest.json')
-        index_key = "index.{}".format(os.environ.get('FILE_TYPE'))
+        manifest_srv_file = os.path.join(course_dir, 'manifest.json')
+        manifest_client_file = os.path.join(temp_course_dir, 'manifest.json')
         lock_f = os.path.join(static_file_path, course_name+'.lock')
         lock = FileLock(lock_f)
         try:
+            with open(manifest_client_file, 'r') as f:
+                manifest_client = json.load(f)
             with lock.acquire(timeout=1):
-                with open(manifest_file, 'r') as f:
+                with open(manifest_srv_file, 'r') as f:
                     manifest_srv = json.load(f)
 
-            # if request.get_json().get("index_mtime") <= manifest_srv[index_key]['mtime']:
-            #     raise PermissionError('Abort: the client version is older than server version')
+            if not whether_can_renew(manifest_srv, manifest_client):
+                return BadRequest('Abort: the client version is older than server version')
 
             os.rename(course_dir, course_dir+'_old')
             os.rename(temp_course_dir, course_dir)
