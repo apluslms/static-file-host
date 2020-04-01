@@ -297,7 +297,7 @@ class TestCourseUpload(unittest.TestCase):
             index = 0
             for chunk, whether_last in iter_read_chunks(buffer, chunk_size=chunk_size):
                 offset = index + len(chunk)
-                headers['Content-Type'] = 'application/octet-stream'
+                headers['Content-Type'] = 'server_app/octet-stream'
                 headers['Chunk-Size'] = str(chunk_size)
                 headers['Chunk-Index'] = str(index)
                 headers['Chunk-Offset'] = str(offset)

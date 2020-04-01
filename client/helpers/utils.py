@@ -71,7 +71,7 @@ class EnvVarNotFoundError(Exception):
 
 
 def examine_env_var():
-    required = {'PLUGIN_API', 'PLUGIN_TOKEN', 'PLUGIN_COURSE', 'ACTION'}
+    required = {'PLUGIN_API', 'PLUGIN_TOKEN', 'PLUGIN_COURSE'}
 
     if required <= os.environ.keys():
         pass

@@ -1,7 +1,5 @@
 import os
 import sys
-import json
-import traceback
 import logging
 import shutil
 import tarfile
@@ -11,7 +9,7 @@ import pprint
 from flask import request
 from werkzeug.exceptions import HTTPException
 
-import management.locks as locks
+import application.locks as locks
 
 
 pp = pprint.PrettyPrinter(indent=4)
@@ -58,7 +56,7 @@ def compare_files_to_update(manifest_client, manifest_srv):
 #
 #     # get the modification time of index.yaml file in the client side
 #     # (the building time of the course to upload)
-#     if content_type == 'application/octet-stream':
+#     if content_type == 'server_app/octet-stream':
 #         try:
 #             client_index_mtime = float(request.headers['Index-Mtime'])
 #         except:

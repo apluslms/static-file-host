@@ -2,16 +2,16 @@ version: "3"
 
 services:
 
-  static_management:
+  server_app:
     build:
-      context: ./static_management
+      context: ./server_app
       dockerfile: Dockerfile
       args:
           SERVER_FILE: html
-    container_name: static_management
+    container_name: server_app
     restart: always
     environment:
-      - APP_NAME=static_management
+      - APP_NAME=server_app
     expose:
       - 9000
     ports:

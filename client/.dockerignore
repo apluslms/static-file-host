@@ -1,11 +1,11 @@
 env/
-.github/
-.pytest_cache/
-**/__pycache__/
-**/.idea/
-**/.vscode/
 
-**/*.pyc
+.pytest_cache/
+__pycache__/
+.idea/
+.vscode/
+
+*.pyc
 
 Dockerfile
 .dockerignore

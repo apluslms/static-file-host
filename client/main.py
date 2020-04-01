@@ -1,19 +1,21 @@
 import os
 import sys
 import requests
+import argparse
 from io import BytesIO
 import json
 import pprint
 import logging
 import traceback
-from upload import upload_to_server
-from utils import (get_file_manifest,
-                   check_directory,
-                   examine_env_var,
-                   GetFileUpdateError,
-                   PublishError,
-                   error_print,
-                   )
+#sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'helpers'))
+from helpers.upload import upload_to_server
+from helpers.utils import (get_file_manifest,
+                           check_directory,
+                           examine_env_var,
+                           GetFileUpdateError,
+                           PublishError,
+                           error_print,
+                           )
 
 logger = logging.getLogger(__name__)
 pp = pprint.PrettyPrinter(indent=4)
@@ -24,15 +26,37 @@ pp = pprint.PrettyPrinter(indent=4)
 # os.environ['UPLOAD_FILE'] = 'html'
 # course_dir = '/u/71/qinq1/unix/Desktop/my_new_course'
 
+COURSE_FOLDER = os.getcwd()
+PROCESS_FILE = os.path.join(COURSE_FOLDER, "process_id.json")
+
 
 def main():
 
+    parser = argparse.ArgumentParser()
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument('--upload', dest='upload', action='store_true', default=False,
+                        help='upload the selected files to the server')
+    action.add_argument('--publish', dest='publish', action='store_true', default=False,
+                        help='publish the selected files to the server')
+    parser.add_argument('--file', '-f', dest='file', type=str, required=True,
+                        help='The files to select')
+
+    try:
+        args = parser.parse_args()
+        upload = args.upload
+        publish = args.publish
+        file = args.file
+        print(args)
+    except:
+        # parser.print_help()
+        logger.debug(error_print)
+        logger.debug("Invalid args provided")
+        sys.exit(1)
     # examine the environment variables
     examine_env_var()
     
     # get the manifest
-    course_dir = os.getcwd()
-    target_dir, index_file, index_mtime = check_directory(course_dir, os.environ['UPLOAD_FILE'])
+    target_dir, index_file, index_mtime = check_directory(COURSE_FOLDER, file)
     manifest_client = get_file_manifest(target_dir)
 
     # Create the in-memory file-like object storing the manifest
@@ -43,9 +67,8 @@ def main():
     headers = {
         'Authorization': 'Bearer {}'.format(os.environ['PLUGIN_TOKEN'])
     }
-
     # upload
-    if os.environ['ACTION'] == 'upload':
+    if upload:
 
         get_files_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/get-files-to-update'
         upload_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/upload-file'
@@ -54,6 +77,7 @@ def main():
         try:
             get_files_r = requests.post(get_files_url, headers=headers,
                                         files={"manifest_client": buffer.getvalue()})
+            print(get_files_r)
             if get_files_r.status_code != 200:
                 raise GetFileUpdateError(get_files_r.text)
 
@@ -77,45 +101,32 @@ def main():
 
         # store the id of this process
         process_id = get_files_r.json().get("process_id")
-        with open(os.path.join(course_dir, 'process_id.json'), 'w') as f:
+        with open(PROCESS_FILE, 'w') as f:
             json.dump({'process_id': process_id}, f)
 
         try:
             # 2. upload files
             data = {"index_mtime": index_mtime, "process_id": process_id}
             upload_to_server(files_upload, target_dir, upload_url, data)
-
-            # 3. finalize the uploading process
-            # data = {"index_mtime": index_mtime,
-            #         "upload": "success",
-            #         "id": process_id}
-            # headers["Content-Type"] = "application/json"
-            # finalizer_r = requests.get(finalizer_url, headers=headers, json=data)
-            # print(finalizer_r.text)
         except:
-            # Send a signal to the server that the process is aborted
-            # logger.error(traceback.format_exc())
-            # data = {"index_mtime": index_mtime,
-            #         "upload": "fail",
-            #         "id": process_id}
-            # headers["Content-Type"] = "application/json"
-            # finalizer_r = requests.get(finalizer_url, headers=headers, json=data)
-            # print(finalizer_r.text)
             print(error_print())
             sys.exit(1)
 
     # publish
-    elif os.environ['ACTION'] == 'publish':
+    elif publish:
         finalizer_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/upload-finalizer'
         try:
             # 3. finalize the uploading process
-            with open(os.path.join(course_dir, 'process_id.json'), 'r') as f:
+            with open(PROCESS_FILE, 'r') as f:
                 process_id = json.load(f)['process_id']
             data = {"index_mtime": index_mtime,
                     # "upload": "success",
                     "process_id": process_id}
             headers["Content-Type"] = "application/json"
-            os.remove(os.path.join(course_dir, 'process_id.json'))
+            try:
+                os.remove(PROCESS_FILE)
+            except:
+                pass
             finalizer_r = requests.get(finalizer_url, headers=headers, json=data)
             if finalizer_r.status_code != 200:
                 raise PublishError(finalizer_r.text)
@@ -124,7 +135,7 @@ def main():
             sys.exit(1)
     else:
         print("Invalid action")
-        os.remove(os.path.join(course_dir, 'process_id.json'))
+        os.remove(PROCESS_FILE)
         sys.exit(1)
 
 

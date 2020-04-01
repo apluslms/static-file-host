@@ -5,7 +5,7 @@ import requests
 from math import floor
 import logging
 
-from utils import UploadError
+from .utils import UploadError
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ def upload_buffer_by_chunk(buffer, whether_last_file, upload_url, headers, data,
     index = 0
     for chunk, last_chunk in iter_read_chunks(buffer, chunk_size=chunk_size):
         offset = index + len(chunk)
-        headers['Content-Type'] = 'application/octet-stream'
+        headers['Content-Type'] = 'server_app/octet-stream'
         headers['Process-ID'] = data['process_id']
         headers['Chunk-Size'] = str(chunk_size)
         headers['Chunk-Index'] = str(index)

@@ -1,5 +1,5 @@
 Flask==1.1.1
 requests==2.22.0
 PyJWT[crypto] ~= 1.7.1
-uWSGI==2.0.18
 filelock==3.0.12
+uWSGI==2.0.18

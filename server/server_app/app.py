@@ -11,9 +11,9 @@ from flask import request, jsonify
 from werkzeug.exceptions import BadRequest
 
 
-from management import create_app, config
-from management.auth import prepare_decoder, authenticate
-from management.utils import (
+from application import create_app, config
+from application.auth import prepare_decoder, authenticate
+from application.utils import (
     compare_files_to_update,
     upload_octet_stream,
     upload_form_data,
@@ -59,10 +59,10 @@ def get_files_to_update(course_name):
         return BadRequest(error_print())
 
     # check whether the index file exists in the client side
-    index_key = "index.{}".format(os.environ.get('FILE_TYPE'))
-    if index_key not in manifest_client:
-        logger.info("The {} is not found in the newly built course!".format(index_key))
-        return BadRequest("The {} is not found in the newly built course!".format(index_key))
+    #index_key = "index.{}".format(os.environ.get('FILE_TYPE'))
+    # if index_key not in manifest_client:
+    #     logger.info("The {} is not found in the newly built course!".format(index_key))
+    #     return BadRequest("The {} is not found in the newly built course!".format(index_key))
 
     course_dir = os.path.join(static_file_path, course_name)
     data = {'course_instance': auth['sub']}  # init the response data
@@ -79,8 +79,8 @@ def get_files_to_update(course_name):
         with open(os.path.join(static_file_path, course_name, 'manifest.json'), 'r') as manifest_srv_file:
             manifest_srv = json.load(manifest_srv_file)
         # check whether the index mtime is earlier than the one in the server
-        if manifest_client[index_key]['mtime'] <= manifest_srv[index_key]['mtime']:
-            return BadRequest('Abort: the client version is older than server version')
+        # if manifest_client[index_key]['mtime'] <= manifest_srv[index_key]['mtime']:
+        #     return BadRequest('Abort: the client version is older than server version')
         data['exist'] = True  # indicate the course exists in the server
 
         # compare the files between the client side and the server side
@@ -120,7 +120,7 @@ def upload_file(course_name):
 
     # upload/ update the courses files of a course
     try:
-        if content_type == 'application/octet-stream':
+        if content_type == 'server_app/octet-stream':
 
             process_id = request.headers['Process-ID']
             index_mtime = int(request.headers['Index-Mtime'])
@@ -168,7 +168,7 @@ def upload_file(course_name):
         with open(os.path.join(temp_course_dir, 'manifest.json'), 'w') as f:
             json.dump(files_new, f)
     else:
-        index_key = "index.{}".format(os.environ.get('FILE_TYPE'))
+        # index_key = "index.{}".format(os.environ.get('FILE_TYPE'))
         manifest_file = os.path.join(static_file_path, course_name, 'manifest.json')
         lock_f = os.path.join(static_file_path, course_name + '.lock')
         lock = FileLock(lock_f)
@@ -177,8 +177,8 @@ def upload_file(course_name):
                 with open(manifest_file, 'r') as f:
                     manifest_srv = json.load(f)
 
-            if index_mtime <= manifest_srv[index_key]['mtime']:
-                raise PermissionError('Abort: the client version is older than server version')
+            # if index_mtime <= manifest_srv[index_key]['mtime']:
+            #     raise PermissionError('Abort: the client version is older than server version')
 
             for f in files_keep:
                 os.link(os.path.join(course_dir, f), os.path.join(temp_course_dir, f))
@@ -239,8 +239,8 @@ def upload_finalizer(course_name):
                 with open(manifest_file, 'r') as f:
                     manifest_srv = json.load(f)
 
-            if request.get_json().get("index_mtime") <= manifest_srv[index_key]['mtime']:
-                raise PermissionError('Abort: the client version is older than server version')
+            # if request.get_json().get("index_mtime") <= manifest_srv[index_key]['mtime']:
+            #     raise PermissionError('Abort: the client version is older than server version')
 
             os.rename(course_dir, course_dir+'_old')
             os.rename(temp_course_dir, course_dir)

@@ -1,4 +1,4 @@
-server/static_management/env/
+server/server_app/env/
 client/env/
 
 **/.idea/
@@ -7,5 +7,5 @@ client/env/
 **/.pytest_cache/
 *.pyc
 
-server/tatic_management/courses/*
-!server/static_management/courses/.keep
+server/server_app/courses/*
+!server/server_app/courses/.keep
