@@ -1,7 +1,6 @@
 version: "3"
 
 services:
-
   server_app:
     build:
       context: ./server_app
@@ -16,9 +15,18 @@ services:
       - 9000
     ports:
       - "127.0.0.1:9000:9001"
+    volumes:
+       - data:/server
   nginx:
     build: ./nginx
     container_name: nginx
     restart: always
     ports:
       - "127.0.0.1:80:80"
+    volumes:
+       - data:/server
+
+volumes:
+   data:
+
+
