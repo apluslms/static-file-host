@@ -1,19 +1,13 @@
 import os
 import sys
-import requests
 import argparse
-from io import BytesIO
-import json
 import pprint
 import logging
-import traceback
 
-from helpers.upload import upload_to_server
-from helpers.utils import (get_file_manifest_in_folder,
-                           validate_directory,
+from aplus_file_management.client import client_action_upload, client_action_publish
+
+from helpers.utils import (validate_directory,
                            examine_env_var,
-                           GetFileUpdateError,
-                           PublishError,
                            error_print,
                            )
 from helpers import COURSE_FOLDER, PROCESS_FILE, FILE_TYPE1
@@ -55,14 +49,9 @@ def main():
     data = validate_directory(COURSE_FOLDER, file_type)
     if file_type in FILE_TYPE1:
         target_dir = data['target_dir']
-        manifest_client = get_file_manifest_in_folder(target_dir)
     else:
         raise NotImplementedError
     print(target_dir)
-    # Create the in-memory file-like object storing the manifest
-    buffer = BytesIO()
-    buffer.write(json.dumps(manifest_client).encode('utf-8'))
-    buffer.seek(0)
 
     headers = {
         'Authorization': 'Bearer {}'.format(os.environ['PLUGIN_TOKEN'])
@@ -74,73 +63,12 @@ def main():
         upload_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/upload-file'
 
         # 1. get the file list to upload from the server side
-        try:
-            get_files_r = requests.post(get_files_url, headers=headers,
-                                        files={"manifest_client": buffer.getvalue()})
-            if get_files_r.status_code != 200:
-                raise GetFileUpdateError(get_files_r.text)
-
-            if not get_files_r.json().get("exist"):
-                # upload the whole folder if the course not exist in the server yet
-                print("The course {} will be newly added".format(os.environ['PLUGIN_COURSE']))
-                files_upload = [(target_dir, os.path.getsize(target_dir))]
-            else:
-                # else get the files to add/update
-                print("The course {} already exists, will be updated".format(os.environ['PLUGIN_COURSE']))
-                files_new = get_files_r.json().get("files_new")
-                files_update = get_files_r.json().get("files_update")
-
-                files_upload_dict = {**files_new, **files_update}
-                files_upload = list()
-                for f in list(files_upload_dict.keys()):
-                    full_path = os.path.join(target_dir, f)
-                    file_size = os.path.getsize(full_path)
-                    files_upload.append((full_path, file_size))
-        except:
-            logger.error(traceback.format_exc())
-            sys.exit(1)
-
-        # store the id of this process
-        process_id = get_files_r.json().get("process_id")
-        with open(PROCESS_FILE, 'w') as f:
-            json.dump({'process_id': process_id}, f)
-
-        try:
-            # 2. upload files
-            # data = {"index_mtime": index_mtime, "process_id": process_id}
-            data = {"process_id": process_id}
-            upload_to_server(files_upload, target_dir, upload_url, data)
-        except:
-            print(error_print())
-            sys.exit(1)
+        client_action_upload(get_files_url, upload_url, headers, target_dir, PROCESS_FILE)
 
     # publish
     elif publish:
-        finalizer_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/upload-finalizer'
-        try:
-            # 3. finalize the uploading process
-            with open(PROCESS_FILE, 'r') as f:
-                process_id = json.load(f)['process_id']
-            data = {"process_id": process_id}
-            headers["Content-Type"] = "application/json"
-            try:
-                os.remove(PROCESS_FILE)
-            except:
-                pass
-            finalizer_r = requests.get(finalizer_url, headers=headers, json=data)
-            if finalizer_r.status_code != 200:
-                raise PublishError(finalizer_r.text)
-            print("The course is published")
-        except:
-            print(error_print())
-            sys.exit(1)
-    else:
-        print("Invalid action")
-        try:
-            os.remove(PROCESS_FILE)
-        except:
-            pass
-        sys.exit(1)
+        publish_url = os.environ['PLUGIN_API'] + os.environ['PLUGIN_COURSE'] + '/upload-finalizer'
+        client_action_publish(publish_url, headers, PROCESS_FILE)
 
 
 if __name__ == "__main__":
