@@ -53,17 +53,11 @@ def whether_can_renew(manifest_srv, manifest_client):
     if os.environ.get("SERVER_FILE") in FILE_TYPE1:
         # check whether the index mtime is earlier than the one in the server
         index_key = "index.{}".format(os.environ.get("SERVER_FILE"))
-        if manifest_client[index_key]['mtime'] > manifest_srv[index_key]['mtime']:
-            flag = True
-        else:
-            flag = False
+        flag = manifest_client[index_key]['mtime'] > manifest_srv[index_key]['mtime']
     else:
         latest_mtime_srv = max(file['mtime'] for file in manifest_srv.values())
         latest_mtime_client = max(file['mtime'] for file in manifest_client.values())
-        if latest_mtime_client > latest_mtime_srv:
-            flag = True
-        else:
-            flag = False
+        flag = latest_mtime_client > latest_mtime_srv
 
     return flag
 # ----------------------------------------------------------------------------------------------------------------------
