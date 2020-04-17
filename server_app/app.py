@@ -74,7 +74,7 @@ def upload_file(course_name):
     return jsonify(**res_data), 200
 
 
-@app.route('/<course_name>/upload-finalizer', methods=['GET'])
+@app.route('/<course_name>/publish-file', methods=['GET'])
 def upload_finalizer(course_name):
 
     auth = authenticate(jwt_decode, request.headers, course_name)

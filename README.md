@@ -1,6 +1,6 @@
-**Static File Management Server**
+**Static File Host**
 ----
-The static file management server hosting the static files of courses. 
+The static file host server hosting the static files of courses. 
 It provides an API allowing users to upload/update static files of courses to it.
  
   
@@ -41,12 +41,14 @@ It provides an API allowing users to upload/update static files of courses to it
   
 * **Method:**
   
-  `POST /<course_name>/get_files_to_update` - Get the list of files to upload / update
+  `POST /<course_name>/get-files-to-update` - Get the list of files to upload / update
   
-  `POST /<course_name>/upload` - Upload static files 
+  `POST /<course_name>/upload-file` - Upload files 
   
-  To upload / update static files, first calling the endpoint `/<course_name>/get_files_to_update` 
-  to decide which files to upload, and then calling the endpoint `/<course_name>/upload` to upload selected files.
-  A docker container for using this API can be seen here: 
-  https://github.com/QianqianQ/aplus_static_upload_container
-
+  `POST /<course_name>/publish-file` - Publish files 
+  
+  To upload / update static files, first calling the endpoint `/<course_name>/get-files-to-update` 
+  to decide which files to upload, and then calling the endpoint `/<course_name>/upload-file` to upload selected files.
+  Finally calling `/<course_name>/publish-file` to publish the uploaded files to the server.
+  <!---A docker container for using this API can be seen here: 
+  https://github.com/QianqianQ/aplus_static_upload_container-->
