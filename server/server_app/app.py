@@ -1,28 +1,21 @@
 import os
 import json
-import shutil
 import pprint
 import logging
-import traceback
-from uuid import uuid4
-from filelock import FileLock
 
 from flask import request, jsonify
 from werkzeug.exceptions import BadRequest
 
+from apluslms_file_transfer.server.action_general import files_to_update, publish_files
+from apluslms_file_transfer.server.auth import prepare_decoder, authenticate
+from apluslms_file_transfer.server.flask import upload_files
+from apluslms_file_transfer.server.utils import tempdir_path
+from apluslms_file_transfer.exceptions import ImproperlyConfigured
 
 from application import create_app, config
-from application.auth import prepare_decoder, authenticate
-from application.utils import (
-    compare_files_to_update,
-    whether_can_renew,
-    upload_octet_stream,
-    upload_form_data,
-    error_print,
-    ImproperlyConfigured,
-    file_move_safe,
-)
-# os.environ['SERVER_FILE'] = 'html'
+
+
+os.environ['SERVER_FILE'] = 'html'
 logger = logging.getLogger(__name__)
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -32,6 +25,11 @@ else:
     app = create_app()
 
 jwt_decode = prepare_decoder(app)
+
+if jwt_decode is None:
+    raise ImproperlyConfigured(
+        "Received request to %s without JWT_PUBLIC_KEY in settings."
+        % (__name__,))
 
 
 @app.route('/', methods=['GET'])
@@ -44,59 +42,20 @@ def get_files_to_update(course_name):
     """
         Get the list of files to update
     """
-    auth = authenticate(jwt_decode)
+    auth = authenticate(jwt_decode, request.headers, course_name)
 
-    # the absolute path of the course in the server
-    static_file_path = app.config.get('STATIC_FILE_PATH')
-    if not static_file_path:
-        return ImproperlyConfigured('STATIC_FILE_PATH not configured')
-
-    # get the manifest from the client
     try:
+        # get the manifest from the client
         file = request.files['manifest_client'].read()
         manifest_client = json.loads(file.decode('utf-8'))
-    except:
-        logger.info(traceback.format_exc())
-        return BadRequest(error_print())
 
-    course_dir = os.path.join(static_file_path, course_name)
-    data = {'course_instance': auth['sub']}  # init the response data
+        res_data = {'course_instance': auth['sub']}  # init the response data
+        res_data = files_to_update(app.config.get('UPLOAD_DIR'), course_name, manifest_client, res_data)
+    except Exception as e:
+        logger.info(e)
+        return BadRequest(str(e))
 
-    # if the course has not been uploaded yet, upload all the files
-    if not os.path.exists(course_dir) or not os.path.isdir(course_dir):
-        data['exist'] = False
-        files_to_update = {'files_new': manifest_client,
-                           'files_update': {},
-                           'files_keep': {},
-                           'files_remove': {}}
-    # else if the course already exists
-    else:
-        with open(os.path.join(static_file_path, course_name, 'manifest.json'), 'r') as manifest_srv_file:
-            manifest_srv = json.load(manifest_srv_file)
-
-        if not whether_can_renew(manifest_srv, manifest_client):
-            return BadRequest('Abort: the client version is older than server version')
-
-        data['exist'] = True  # indicate the course exists in the server
-
-        # compare the files between the client side and the server side
-        # get list of files to upload / update
-        files_to_update = compare_files_to_update(manifest_client, manifest_srv)
-
-    # get a unique id for this uploading process
-    process_id = str(uuid4())
-    data['process_id'] = process_id
-
-    # create a temp directory where the files will be uploaded to
-    temp_dir = os.path.join(static_file_path, 'temp_' + course_name + '_' + process_id)
-    os.mkdir(temp_dir)
-    # Store the files will be updated in a temp json file
-    with open(os.path.join(temp_dir, 'files_to_update.json'), 'w') as f:
-        # f.write(json.dumps(files_to_update, sort_keys=True, indent=4))
-        json.dump(files_to_update, f, sort_keys=True, indent=4)
-    data['files_new'], data['files_update'] = files_to_update['files_new'], files_to_update['files_update']
-
-    return jsonify(**data), 200
+    return jsonify(**res_data), 200
 
 
 @app.route('/<course_name>/upload-file', methods=['GET', 'POST'])
@@ -104,161 +63,44 @@ def upload_file(course_name):
     """
         Upload/Update static file of a course
     """
-    auth = authenticate(jwt_decode)
+    auth = authenticate(jwt_decode, request.headers, course_name)
 
-    # the absolute path of the course in the server
-    static_file_path = app.config.get('STATIC_FILE_PATH')
-    if not static_file_path:
-        return ImproperlyConfigured('STATIC_FILE_PATH not configured')
-
-    content_type = request.content_type
-
-    # upload/ update the courses files of a course
+    res_data = {'course_instance': auth['sub']}
     try:
-        if content_type == 'application/octet-stream':
+        res_data = upload_files(app.config.get('UPLOAD_DIR'), course_name, res_data)
+    except Exception as e:
+        return BadRequest(e)
 
-            process_id = request.headers['Process-ID']
-            # index_mtime = int(request.headers['Index-Mtime'])
-            temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name + '_' + process_id)
-
-            upload_octet_stream(temp_course_dir)
-
-            if 'Last-File' in request.headers:
-                status = "completed"
-            else:
-                status = "in process - success"
-
-        elif content_type.startswith('multipart/form-data'):
-
-            data, file = request.form, request.files['file']
-            process_id = data['process_id']
-            temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name + '_' + process_id)
-            upload_form_data(file, temp_course_dir)
-            if data.get('last_file') is True or data.get('last_file') == 'True':
-                status = "completed"
-            else:
-                status = "in process - success"
-        else:
-            raise ValueError('Upload-File Error: Unsupported content-type')
-    except:
-        return BadRequest(error_print())
-
-    # The previous implementation create new manifest in the upload-finalizer endpoint
-    # now move this step in the upload-file endpoint
-    # if the manifest.json in the temp dir, it could be said that the upload is completed?
-    # Or if any problems occurs, rename the folder as 'fail_*' to indicate it is a dropped temp dir?
-    with open(os.path.join(temp_course_dir, 'files_to_update.json'), 'r') as f:
-        files_to_update = json.loads(f.read())
-
-    files_new, files_update, files_keep, files_remove = (files_to_update['files_new'],
-                                                         files_to_update['files_update'],
-                                                         files_to_update['files_keep'],
-                                                         files_to_update['files_remove'])
-    os.remove(os.path.join(temp_course_dir, 'files_to_update.json'))
-
-    course_dir = os.path.join(static_file_path, course_name)
-
-    if not os.path.exists(course_dir) and not files_update and not files_keep and not files_remove:
-        with open(os.path.join(temp_course_dir, 'manifest.json'), 'w') as f:
-            json.dump(files_new, f)
-    else:
-        manifest_file = os.path.join(static_file_path, course_name, 'manifest.json')
-        lock_f = os.path.join(static_file_path, course_name + '.lock')
-        lock = FileLock(lock_f)
-        try:
-            with lock.acquire(timeout=1):
-                with open(manifest_file, 'r') as f:
-                    manifest_srv = json.load(f)
-
-            for f in files_keep:
-                temp_fp = os.path.join(temp_course_dir, f)
-                os.makedirs(os.path.dirname(temp_fp), exist_ok=True)
-                os.link(os.path.join(course_dir, f), temp_fp)
-
-            # add/update manifest
-            files_upload = {**files_new, **files_update}
-            for f in files_upload:
-                manifest_srv[f] = files_upload[f]
-            # remove old files
-            for f in files_remove:
-                # os.remove(os.path.join(course_dir, f))
-                del manifest_srv[f]
-
-            with open(os.path.join(temp_course_dir, 'manifest.json'), 'w') as f:
-                json.dump(manifest_srv, f)
-            os.remove(lock_f)
-        except:
-            logger.debug(traceback.format_exc())
-            os.remove(lock_f)
-            return BadRequest(traceback.format_exc())
-
-    return jsonify({
-        'course_instance': auth['sub'],
-        'status': status
-    }), 200
+    return jsonify(**res_data), 200
 
 
 @app.route('/<course_name>/upload-finalizer', methods=['GET'])
 def upload_finalizer(course_name):
 
-    auth = authenticate(jwt_decode)
+    auth = authenticate(jwt_decode, request.headers, course_name)
+
     process_id = request.get_json().get("process_id")
     if process_id is None:
         return BadRequest("Invalid finalizer of the uploading process")
 
-    # the absolute path of the course in the server
-    static_file_path = app.config.get('STATIC_FILE_PATH')
-    if not static_file_path:
-        return ImproperlyConfigured('STATIC_FILE_PATH not configured')
-
-    temp_course_dir = os.path.join(static_file_path, 'temp_' + course_name + '_' + process_id)
-    if not os.path.exists(os.path.join(temp_course_dir, 'manifest.json')):  # The uploading is not completed
+    temp_course_dir = tempdir_path(app.config.get('UPLOAD_DIR'), course_name, process_id)
+    if not os.path.exists(os.path.join(temp_course_dir, 'manifest.json')):  # the uploading is not completed
         return BadRequest("The upload is not completed")
 
-    course_dir = os.path.join(static_file_path, course_name)
+    res_data = {'course_instance': auth['sub']}
 
-    # if the course does exist, rename the temp dir
-    if not os.path.exists(course_dir):
-        os.rename(temp_course_dir, course_dir)
-    # if the course already exist
-    else:
-        manifest_srv_file = os.path.join(course_dir, 'manifest.json')
-        manifest_client_file = os.path.join(temp_course_dir, 'manifest.json')
-        lock_f = os.path.join(static_file_path, course_name+'.lock')
-        lock = FileLock(lock_f)
-        try:
-            with open(manifest_client_file, 'r') as f:
-                manifest_client = json.load(f)
-            with lock.acquire(timeout=1):
-                with open(manifest_srv_file, 'r') as f:
-                    manifest_srv = json.load(f)
+    res_data = publish_files(upload_dir=app.config.get('UPLOAD_DIR'),
+                             course_name=course_name,
+                             file_type=os.environ['SERVER_FILE'],
+                             temp_course_dir=temp_course_dir,
+                             res_data=res_data)
 
-            if not whether_can_renew(manifest_srv, manifest_client):
-                return BadRequest('Abort: the client version is older than server version')
-
-            os.rename(course_dir, course_dir+'_old')
-            os.rename(temp_course_dir, course_dir)
-            shutil.rmtree(course_dir+'_old')
-            os.remove(lock_f)
-        # except Timeout:
-        #     print('another process is running')
-        #     time.sleep(5)
-        # if another error raises
-        except:
-            logger.debug(traceback.format_exc())
-            # shutil.rmtree(temp_course_dir)
-            os.remove(lock_f)
-            return BadRequest(traceback.format_exc())
-
-    return jsonify({
-        'course_instance': auth['sub'],
-        'msg': 'The course is successfully uploaded'
-    }), 200
+    return jsonify(**res_data), 200
 
 
 if __name__ == '__main__':
     if os.getenv('FLASK_ENV') == 'development':
-        app.run(debug=True, host='0.0.0.0', port=5000)
+        app.run(debug=True, host='0.0.0.0', port=5001)
     else:
         app.run()
 
