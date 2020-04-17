@@ -1,5 +1,4 @@
-server/server_app/env/
-client/env/
+server_app/venv/
 
 **/.idea/
 **/.vscode/
@@ -7,5 +6,5 @@ client/env/
 **/.pytest_cache/
 *.pyc
 
-server/server_app/courses/*
-!server/server_app/courses/.keep
+server_app/courses/*
+server_app/courses/.keep
