@@ -22,6 +22,7 @@ RUN pip3 install uwsgi -I --no-cache-dir
 WORKDIR ${SERVER_PATH}
 COPY requirements.txt ./
 RUN pip3 install -r requirements.txt
+#RUN pip3 install git+https://github.com/apluslms/apluslms-file-transfer.git
 
 COPY . ./
 RUN chown -R www-data:www-data .
