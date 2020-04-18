@@ -7,4 +7,4 @@ server_app/venv/
 *.pyc
 
 server_app/courses/*
-server_app/courses/.keep
+!server_app/courses/.keep
