@@ -41,14 +41,14 @@ It provides an API allowing users to upload/update static files of courses to it
   
 * **Method:**
   
-  `POST /<course_name>/get-files-to-update` - Get the list of files to upload / update
+  `POST /<course_name>/select-files` - Get the list of files to upload / update
   
-  `POST /<course_name>/upload-file` - Upload files 
+  `POST /<course_name>/upload-files` - Upload files 
   
-  `POST /<course_name>/publish-file` - Publish files 
+  `POST /<course_name>/publish-files` - Publish files 
   
-  To upload / update static files, first calling the endpoint `/<course_name>/get-files-to-update` 
-  to decide which files to upload, and then calling the endpoint `/<course_name>/upload-file` to upload selected files.
-  Finally calling `/<course_name>/publish-file` to publish the uploaded files to the server.
+  To upload / update static files, first calling the endpoint `/<course_name>/select-files` 
+  to decide which files to upload, and then calling the endpoint `/<course_name>/upload-files` to upload selected files.
+  Finally calling `/<course_name>/publish-files` to publish the uploaded files to the server.
   <!---A docker container for using this API can be seen here: 
   https://github.com/QianqianQ/aplus_static_upload_container-->

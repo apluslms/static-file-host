@@ -6,8 +6,8 @@ from apluslms_file_transfer.exceptions import ImproperlyConfigured
 
 from . import config
 
-# CLEANUP_TIME = 60*60*24  # a day
-CLEANUP_TIME = 60  # a day
+CLEANUP_TIME = 60*60*24  # a day
+# CLEANUP_TIME = 60  # 1 minute, for development purpose
 cleanup_thread = threading.Thread(daemon=True)
 
 

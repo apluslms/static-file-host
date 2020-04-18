@@ -7,15 +7,15 @@ from flask import request, jsonify
 from werkzeug.exceptions import BadRequest
 
 from apluslms_file_transfer.server.action_general import files_to_update, publish_files
-from apluslms_file_transfer.server.auth import prepare_decoder, authenticate
-from apluslms_file_transfer.server.flask import upload_files
+from apluslms_file_transfer.server.auth import authenticate
+from apluslms_file_transfer.server.flask import prepare_decoder, upload_files
 from apluslms_file_transfer.server.utils import tempdir_path
 from apluslms_file_transfer.exceptions import ImproperlyConfigured
 
 from application import create_app, config
 
-
-os.environ['SERVER_FILE'] = 'html'
+# UPLOAD_FILE_TYPE = os.environ['UPLOAD_FILE_TYPE']
+UPLOAD_FILE_TYPE = 'html'
 logger = logging.getLogger(__name__)
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -37,7 +37,7 @@ def index():
     return "Static File Management Server"
 
 
-@app.route('/<course_name>/get-files-to-update', methods=['GET', 'POST'])
+@app.route('/<course_name>/select-files', methods=['GET', 'POST'])
 def get_files_to_update(course_name):
     """
         Get the list of files to update
@@ -50,7 +50,11 @@ def get_files_to_update(course_name):
         manifest_client = json.loads(file.decode('utf-8'))
 
         res_data = {'course_instance': auth['sub']}  # init the response data
-        res_data = files_to_update(app.config.get('UPLOAD_DIR'), course_name, manifest_client, res_data)
+        res_data = files_to_update(upload_dir=app.config.get('UPLOAD_DIR'),
+                                   course_name=course_name,
+                                   upload_file_type=UPLOAD_FILE_TYPE,
+                                   manifest_client=manifest_client,
+                                   data=res_data)
     except Exception as e:
         logger.info(e)
         return BadRequest(str(e))
@@ -58,7 +62,7 @@ def get_files_to_update(course_name):
     return jsonify(**res_data), 200
 
 
-@app.route('/<course_name>/upload-file', methods=['GET', 'POST'])
+@app.route('/<course_name>/upload-files', methods=['GET', 'POST'])
 def upload_file(course_name):
     """
         Upload/Update static file of a course
@@ -74,7 +78,7 @@ def upload_file(course_name):
     return jsonify(**res_data), 200
 
 
-@app.route('/<course_name>/publish-file', methods=['GET'])
+@app.route('/<course_name>/publish-files', methods=['GET'])
 def upload_finalizer(course_name):
 
     auth = authenticate(jwt_decode, request.headers, course_name)
@@ -91,7 +95,7 @@ def upload_finalizer(course_name):
 
     res_data = publish_files(upload_dir=app.config.get('UPLOAD_DIR'),
                              course_name=course_name,
-                             file_type=os.environ['SERVER_FILE'],
+                             file_type=UPLOAD_FILE_TYPE,
                              temp_course_dir=temp_course_dir,
                              res_data=res_data)
 
