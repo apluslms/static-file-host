@@ -1,0 +1,12 @@
+{% extends 'frame.html' %}
+
+{% block body %}
+<h1>Available courses</h1>
+<div class="list-group">
+	{% for course in courses %}
+	<a href= "#" class="list-group-item">
+		{{ course }}
+	</a>
+	{% endfor %}
+</div>
+{% endblock %}

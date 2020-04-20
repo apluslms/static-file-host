@@ -16,7 +16,7 @@ services:
     ports:
       - "9000:9001"
     volumes:
-       - data:/server
+       - ./server_app:/server
   nginx:
     build: ./nginx
     container_name: nginx
@@ -24,9 +24,6 @@ services:
     ports:
       - "7000:80"
     volumes:
-       - data:/server
-
-volumes:
-   data:
+       - ./server_app:/server
 
 

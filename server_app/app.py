@@ -3,7 +3,9 @@ import json
 import pprint
 import logging
 
-from flask import request, jsonify
+from flask import (request,
+                   jsonify,
+                   render_template,)
 from werkzeug.exceptions import BadRequest
 
 from apluslms_file_transfer.server.action_general import files_to_update, publish_files
@@ -32,9 +34,15 @@ if jwt_decode is None:
         % (__name__,))
 
 
-@app.route('/', methods=['GET'])
+@app.route('/')
 def index():
-    return "Static File Management Server"
+    print(app.config['UPLOAD_DIR'])
+    courses = [course for course in os.listdir(app.config['UPLOAD_DIR'])
+               if (not course.startswith('temp') and
+                   not course.startswith('.') and
+                   os.path.isdir(os.path.join(app.config['UPLOAD_DIR'], course)))]
+    print(courses)
+    return render_template('index.html', courses=courses)
 
 
 @app.route('/<course_name>/select-files', methods=['GET', 'POST'])
