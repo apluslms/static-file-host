@@ -1,3 +1,4 @@
+from os.path import join, dirname, abspath
 import threading
 from flask import Flask
 
@@ -12,7 +13,9 @@ cleanup_thread = threading.Thread(daemon=True)
 
 
 def create_app(configuration=config.BaseConfig):
-    app = Flask(__name__)
+
+    templates_folder = join(dirname(abspath(__file__)), 'templates')
+    app = Flask(__name__, template_folder=templates_folder)
     app.config.from_object(configuration)
 
     # the absolute path of the course in the server
