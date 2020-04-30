@@ -1,7 +1,12 @@
 **Static File Host**
 ----
-The static file host server hosting the static files of courses. 
-It provides an API allowing users to upload/update static files of courses to it.
+The static file host server hosting the static files of courses built [roman](https://github.com/apluslms/roman). 
+It provides API allowing users to upload/update static files of courses to it.
+
+ It is built with the help of [aplus-file-transfer](https://github.com/apluslms/apluslms-file-transfer) package.
+
+### Architecture
+![Architecture](./doc/architecture.png)
  
   
 * **Authentication**
@@ -41,14 +46,50 @@ It provides an API allowing users to upload/update static files of courses to it
   
 * **Method:**
   
-  `POST /<course_name>/select-files` - Get the list of files to upload / update
+  `POST /<course_name>/select-files` - Select files of the course to upload
   
-  `POST /<course_name>/upload-files` - Upload files 
+  `POST /<course_name>/upload-files` - Upload the files to a temporary course directory
   
-  `POST /<course_name>/publish-files` - Publish files 
+  `POST /<course_name>/publish-files` - Upload the files to a temporary course directory
   
-  To upload / update static files, first calling the endpoint `/<course_name>/select-files` 
+  To deploy static files of a course, first calling the endpoint `/<course_name>/select-files` 
   to decide which files to upload, and then calling the endpoint `/<course_name>/upload-files` to upload selected files.
-  Finally calling `/<course_name>/publish-files` to publish the uploaded files to the server.
-  <!---A docker container for using this API can be seen here: 
-  https://github.com/QianqianQ/aplus_static_upload_container-->
+  Finally calling `/<course_name>/publish-files` to publish the uploaded files to the server. 
+  The docker container of deploying a course to the server is available in [aplus-file-transfer](https://github.com/apluslms/apluslms-file-transfer).
+  
+### Set up the server
+
+
+    # to the root of repo
+    cd static-file-host
+    
+    # build the images
+    docker-compose build
+
+    # start up the server
+    docker-compose up
+
+Visit http://localhost:7000/ (or replace `localhost` with the `docker0` IP address). 
+Currently only the name list of uploaded courses in the server is showed.
+
+Visit http://localhost:7000/courses/ to see the uploaded files (it lists the directory `/server_app/courses/` that hosting static files in the `nginx` container).
+
+### For develop and test the Flask app alone
+                             
+    # to the root of repo    
+    cd static-file-host/server_app      
+                             
+    # in your vitrualenv       
+    pip install -r requirements.txt
+    # or
+    # pip3 install -r requirements.txt
+    
+    # development mode
+    export FLASK_ENV=development
+    
+    # run the app
+    python app.py
+    # or
+    # python3 app.py    
+    
+   Visit http://localhost:5000/
